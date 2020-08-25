@@ -519,10 +519,6 @@ static void warm_sleep_cycle() {
     // restore game pixels
     
     restorePixels();
-
-    // Clear out any pending button press to make sure we will not be processing
-    // a button press that was used to wake us up unless we want to.
-    blinkbios_button_block.bitflags = 0;
     
 }
 
@@ -1426,17 +1422,16 @@ void __attribute__((noreturn)) run(void)  {
             viralPostponeWarmSleep();
         }
 
+        // Update the IR RX state
+        // Receive any pending packets
+        RX_IRFaces();
+
         cli();
         buttonSnapshotDown       = blinkbios_button_block.down;
         buttonSnapshotBitflags  |= blinkbios_button_block.bitflags;     // Or any new flags into the ones we got
         blinkbios_button_block.bitflags=0;                              // Clear out the flags now that we have them
         buttonSnapshotClickcount = blinkbios_button_block.clickcount;
         sei();
-
-
-        // Update the IR RX state
-        // Receive any pending packets
-        RX_IRFaces();
 
         loop();
 
