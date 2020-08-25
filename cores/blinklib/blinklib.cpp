@@ -519,6 +519,10 @@ static void warm_sleep_cycle() {
     // restore game pixels
     
     restorePixels();
+
+    // Clear out any pending button press to make sure we will not be processing
+    // a button press that was used to wake us up unless we want to.
+    blinkbios_button_block.bitflags = 0;
     
 }
 
@@ -1391,12 +1395,6 @@ void __attribute__((noreturn)) run(void)  {
                 // Held down past the 7 second mark, so this is a force sleep request
 
                 warm_sleep_cycle();
-
-                // Clear out the press that put us to sleep so we do not see it again
-                // Also clear out everything else so we start with a clean slate on waking
-                                
-                blinkbios_button_block.bitflags = 0;
-
             } else {
 
                 // They let go before we got to 7 seconds, so enter SEED mode! (and never return!)
@@ -1415,10 +1413,6 @@ void __attribute__((noreturn)) run(void)  {
         if ( ( blinkbios_button_block.bitflags & BUTTON_BITFLAG_6SECPRESSED)  ) {
 
             warm_sleep_cycle();
-
-            // Clear out the press that put us to sleep so we do not see it again
-            // Also clear out everything else so we start with a clean slate on waking
-            blinkbios_button_block.bitflags = 0;
 
         }
 
