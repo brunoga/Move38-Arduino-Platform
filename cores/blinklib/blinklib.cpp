@@ -40,11 +40,12 @@
 // The actual memory for these blocks is allocated in main.cpp. Remember, it overlaps with the same blocks in BlinkBIOS code running in the bootloader!
 
 #include "shared/blinkbios_shared_button.h"
-#include "shared/blinkbios_shared_millis.h"
 #include "shared/blinkbios_shared_pixel.h"
 #include "shared/blinkbios_shared_irdata.h"
 
 #include "shared/blinkbios_shared_functions.h"     // Gets us ir_send_packet()
+
+#include "blinklib_time.h"
 
 
 #define TX_PROBE_TIME_MS           150     // How often to do a blind send when no RX has happened recently to trigger ping pong
@@ -181,22 +182,6 @@ static face_t faces[FACE_COUNT];
 uint8_t viralButtonPressSendOnFaceBitflags;   // A 1 here means send the viral button press bit on the next IR packet on this face. Cleared when it gets sent. 
 
 Timer viralButtonPressLockoutTimer;     // Set each time we send a viral button press to avoid sending getting into a circular loop
-
-// Millis snapshot for this pass though loop
-millis_t now;
-
-// Capture time snapshot
-// It is 4 bytes long so we cli() so it can not get updated in the middle of us grabbing it
-
-void updateNow() {
-    cli();
-    now = blinkbios_millis_block.millis;
-    sei();
-}
-
-unsigned long millis() {
-    return now;
-}
 
 // Returns the inverted checksum of all bytes
 
@@ -554,7 +539,7 @@ static void RX_IRFaces() {
 
             // Got something, so we know there is someone out there
             // TODO: Should we require the received packet to pass error checks?
-            face->expireTime = now + RX_EXPIRE_TIME_MS;
+            face->expireTime = blinklib::time::now + RX_EXPIRE_TIME_MS;
 
             // This is slightly ugly. To save a buffer, we get the full packet with the BlinkBIOS IR packet type byte.                       
 
@@ -674,7 +659,7 @@ static void TX_IRFaces() {
         
         // Send one out too if it is time....
 
-        if ( face->sendTime <= now ) {        // Time to send on this face?
+        if ( face->sendTime <= blinklib::time::now ) {        // Time to send on this face?
                                               // Note that we do not use the rx_fresh flag here because we want the timeout
                                               // to do automatic retries to kickstart things when a new neighbor shows up or
                                               // when an IR message gets missed
@@ -749,7 +734,7 @@ static void TX_IRFaces() {
 				// pass thugh loop() every time when there are no neighbors.
                 
 				 
-                face->sendTime = now + TX_PROBE_TIME_MS + f;	
+                face->sendTime = blinklib::time::now + TX_PROBE_TIME_MS + f;	
                 
                 
                 // Mark any pending datagram as sent
@@ -803,7 +788,7 @@ byte didValueOnFaceChange( byte face ) {
 
 byte isValueReceivedOnFaceExpired( byte face ) {
 
-    return faces[face].expireTime < now;
+    return faces[face].expireTime < blinklib::time::now;
 
 }
 
@@ -1336,7 +1321,7 @@ void __attribute__((noreturn)) run(void)  {
 
     blinkbios_button_block.wokeFlag = 1;        // Clear any old wakes (wokeFlag is cleared to 0 on wake)
 
-    updateNow();                    // Initialize out internal millis so that when we reset the warm sleep counter it is right, and so setup sees the right millis time
+    blinklib::time::updateNow();                    // Initialize out internal millis so that when we reset the warm sleep counter it is right, and so setup sees the right millis time
     reset_warm_sleep_timer();
     
     statckwatcher_init();   // Set up the sentinel byte at the top of RAM used by variables so we can tell if stack clobbered it
@@ -1416,7 +1401,7 @@ void __attribute__((noreturn)) run(void)  {
         // Used by millis() and Timer thus functions
         // This comes after the possible button holding to enter seed mode
        
-        updateNow();
+        blinklib::time::updateNow();
                 
         if ( blinkbios_button_block.bitflags & BUTTON_BITFLAG_PRESSED  ) {  // Any button press resets the warm sleep timeout
             viralPostponeWarmSleep();
