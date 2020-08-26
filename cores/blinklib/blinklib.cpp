@@ -589,10 +589,11 @@ static void RX_IRFaces() {
 
           } else {  // packetLen == 2
 
-            // Here is look for a magic packet that has only 1 byte of data and
-            // it is the special sleep trigger cookie
+            // Here is look for a magic packet that has 2 bytes of data and
+            // both are the special sleep trigger cookie. We only check the
+            // first one though.
 
-            if (packetData[1] == TRIGGER_WARM_SLEEP_SPECIAL_VALUE) {
+            if (packetData[0] == TRIGGER_WARM_SLEEP_SPECIAL_VALUE) {
               warm_sleep_cycle();
             }
           }
