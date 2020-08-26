@@ -583,7 +583,7 @@ static void TX_IRFaces() {
       // repeatedly in the same pass thugh loop() every time when there are
       // no neighbors.
 
-      face->sendTime = blinklib::time::now + TX_PROBE_TIME_MS + f;
+      face->sendTime = blinklib::time::now + TX_PROBE_TIME_MS;
 
     }  // if ( face->sendTime <= now )
 
