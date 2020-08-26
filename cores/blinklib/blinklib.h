@@ -32,9 +32,8 @@
 */
 
 // The value of the data sent and received on faces via IR can be between 0 and IR_DATA_VALUE_MAX
-// If you try to send higher than this, the max value will be sent.
 
-#define IR_DATA_VALUE_MAX 63
+#define IR_DATA_VALUE_MAX 255
 
 // Returns the last received value on the indicated face
 // Between 0 and IR_DATA_VALUE_MAX inclusive
@@ -60,7 +59,6 @@ bool isAlone();
 
 // Set value that will be continuously broadcast on specified face.
 // Value should be between 0 and IR_DATA_VALUE_MAX inclusive.
-// If a value greater than IR_DATA_VALUE_MAX is specified, IR_DATA_VALUE_MAX will be sent.
 // By default we power up with all faces sending the value 0.
 
 void setValueSentOnFace( byte value , byte face );

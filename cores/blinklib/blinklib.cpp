@@ -85,60 +85,6 @@
 
 #define NOP_SPECIAL_VALUE 0b00110011
 
-// We use bit 6 in the IR data to indicate that a button has been pressed so we
-// should postpone sleeping. This spreads a button press to all connected tiles
-// so they will stay awake if any tile in the group gets pressed.
-
-// We use bit 7 in the IR data as ODD parity check. We do ODD to make sure at
-// least 1 bit is always set (otherwise 0x00 would be 0x00 with parity).
-
-// Assumes ( d < IR_DATA_VALUE_MAX )
-
-#if IR_DATA_VALUE_MAX > 63
-#warning The following code assumes that the top two bits of the header byte are available
-#endif
-
-// Returns true if odd number of bits set
-// TODO: make asm
-
-uint8_t oddParity(uint8_t d) {
-  uint8_t bits = 0;
-
-  while (d) {
-    if (d & 0b00000001) {
-      bits++;
-    }
-
-    d >>= 1;
-  }
-
-  return bits & 0xb00000001;
-}
-
-static uint8_t irValueEncode(uint8_t d, uint8_t postponeSleepFlag) {
-  if (postponeSleepFlag) {
-    d |= 0b01000000;  // 6th bit button pressed flag
-  }
-
-  if (!oddParity(d)) {
-    d |= 0b10000000;  // Top bit ODD parity (including postpone sleep flag)
-  }
-
-  return d;
-}
-
-static uint8_t irValueCheckValid(uint8_t d) {
-  return oddParity(d);  // Odd parity
-}
-
-// The actual data is hidden in the middle
-
-static uint8_t irValueDecodeData(uint8_t d) { return (d & 0b00111111); }
-
-static uint8_t irValueDecodePostponeSleepFlag(uint8_t d) {
-  return d & 0b01000000;
-}
-
 // TODO: These structs even better if they are padded to a power of 2 like
 // https://stackoverflow.com/questions/1239855/pad-a-c-structure-to-a-power-of-two
 
@@ -186,10 +132,10 @@ uint8_t computePacketChecksum(volatile const uint8_t *buffer, uint8_t len) {
   uint8_t computedChecksum = 0;
 
   for (uint8_t l = 0; l < len; l++) {
-    computedChecksum += *buffer++;
+    computedChecksum = (computedChecksum + buffer[l]) & 0b01111111;
   }
 
-  return computedChecksum ^ 0xff;
+  return computedChecksum ^ 0b01111111;
 }
 
 #if ((IR_LONG_PACKET_MAX_LEN + 3) > IR_RX_PACKET_SIZE)
@@ -311,12 +257,11 @@ void restorePixels() {
 // special cookie value Because it must be 2 long, this means that the cookie
 // can still be a data value since that value would only have a 1 byte packet
 
-static uint8_t force_sleep_packet[2] = {TRIGGER_WARM_SLEEP_SPECIAL_VALUE,
-                                        TRIGGER_WARM_SLEEP_SPECIAL_VALUE};
+static uint8_t force_sleep_packet = TRIGGER_WARM_SLEEP_SPECIAL_VALUE;
 
 // This packet does nothing except wake up our neighbors
 
-static uint8_t nop_wake_packet[2] = {NOP_SPECIAL_VALUE, NOP_SPECIAL_VALUE};
+static uint8_t nop_wake_packet = NOP_SPECIAL_VALUE;
 
 #define SLEEP_PACKET_REPEAT_COUNT \
   5  // How many times do we send the sleep and wake packets for redunancy?
@@ -365,11 +310,7 @@ static void warm_sleep_cycle() {
       // while ( blinkbios_is_rx_in_progress( f ) );     // Wait to clear to
       // send (no guarantee, but better than just blink sending)
 
-      blinkbios_irdata_send_packet(
-          f, force_sleep_packet,
-          sizeof(force_sleep_packet));  // Note that we can use sizeof() here
-                                        // becuase the arrayt is explicity
-                                        // uint8_t which is always a byte on AVR
+      blinkbios_irdata_send_packet(f, &force_sleep_packet, 1);
     }
   }
 
@@ -475,11 +416,7 @@ static void warm_sleep_cycle() {
       fade_brightness += animation_fade_step;
       setColorNow(dim(WHITE, fade_brightness));
 
-      blinkbios_irdata_send_packet(
-          f, nop_wake_packet,
-          sizeof(nop_wake_packet));  // Note that we can use sizeof() here
-                                     // becuase the arrayt is explicity uint8_t
-                                     // which is always a byte on AVR
+      blinkbios_irdata_send_packet(f, &nop_wake_packet, 1);
     }
   }
 
@@ -529,80 +466,39 @@ static void RX_IRFaces() {
         uint8_t packetDataLen = (ir_rx_state->packetBufferLen) -
                                 1;  // deduct the BlinkBIOS packet type  byte
 
-        // blinkBIOS will only pass use packets with len >0
+        if (packetDataLen > 1) {
+          // Validate checksum.
+          byte checksum = packetData[packetDataLen - 1];
+          if (computePacketChecksum(packetData, packetDataLen - 1) ==
+              checksum) {
+            // If we get here, then we know this is a valid packet
 
-        uint8_t irDataFirstByte = *packetData;
+            // Clear to send on this face immediately to ping-pong
+            // messages at max speed without collisions
+            face->sendTime = 0;
 
-        if (irValueCheckValid(irDataFirstByte)) {
-          // If we get here, then we know this is a valid packet
+            if ((checksum & 0b10000000) != 0) {
+              // The blink on on the other side of this connection
+              // is telling us that a button was pressed recently
+              // Send the viral message to all neighbors.
 
-          // Clear to send on this face immediately to ping-pong messages at max
-          // speed without collisions
-          face->sendTime = 0;
+              viralPostponeWarmSleep();
 
-          if (irValueDecodePostponeSleepFlag(irDataFirstByte)) {
-            // The blink on on the other side of this connection is telling us
-            // that a button was pressed recently Send the viral message to all
-            // neighbors.
-
-            viralPostponeWarmSleep();
-
-            // We also need to extend hardware sleep
-            // since we did not get a physical button press
-            BLINKBIOS_POSTPONE_SLEEP_VECTOR();
-          }
-
-          face->inValue = irValueDecodeData(irDataFirstByte);
-
-          if (packetDataLen > 2) {  // we also have a datagram
-
-            packetData++;
-
-            uint8_t datagramPayloadLen =
-                packetDataLen - 1;  // We deduct 1 from he length to account for
-                                    // the trailing checksum byte
-            const uint8_t *datagramPayloadData =
-                packetData;  // Skip the packet header byte
-
-            // Long packets are kind of a special case since we do not mark them
-            // read immediately
-            if (computePacketChecksum(datagramPayloadData,
-                                      datagramPayloadLen) ==
-                datagramPayloadData
-                    [datagramPayloadLen]) {  // Run checksum on payload bytes
-                                             // after the header, compare that
-                                             // to the checksum at the end
-
-              // Ok this packet checks out folks!
-
-              if (face->inDatagramLen == 0 &&
-                  !(datagramPayloadLen >
-                    IR_DATAGRAM_LEN)) {  // Check if buffer free and datagram
-                                         // not too long
-
-                face->inDatagramLen = datagramPayloadLen;
-
-                memcpy(face->inDatagramData, datagramPayloadData,
-                       datagramPayloadLen);
-              }
+              // We also need to extend hardware sleep
+              // since we did not get a physical button press
+              BLINKBIOS_POSTPONE_SLEEP_VECTOR();
             }
 
-          } else {  // packetLen == 2
-
-            // Here is look for a magic packet that has 2 bytes of data and
-            // both are the special sleep trigger cookie. We only check the
-            // first one though.
-
-            if (packetData[0] == TRIGGER_WARM_SLEEP_SPECIAL_VALUE) {
-              warm_sleep_cycle();
-            }
+            memcpy(&face->inValue, (const void *)packetData, packetDataLen - 1);
           }
+        } else {  // packetDataLen == 1
+          // Here is look for a magic packet that has 1 bytes
+          // of data and it is the special sleep trigger
+          // cookie.
 
-        } else {
-          // Invalid packet received. No good way to show or log this. :/
-
-          //#warning
-          // setColorNow( RED );
+          if (packetData[0] == TRIGGER_WARM_SLEEP_SPECIAL_VALUE) {
+            warm_sleep_cycle();
+          }
         }
       }
 
@@ -634,79 +530,50 @@ static void TX_IRFaces() {
 
     if (face->sendTime <= blinklib::time::now) {  // Time to send on this face?
       // Note that we do not use the rx_fresh flag here because we want the
-      // timeout to do automatic retries to kickstart things when a new neighbor
-      // shows up or when an IR message gets missed
+      // timeout to do automatic retries to kickstart things when a new
+      // neighbor shows up or when an IR message gets missed
 
-      uint8_t outgoingPacketLen;  // Total length of the outgoing packet in
-                                  // ir_send_packet_buffer
-      uint8_t outgoiungPacketHeaderValue =
-          face->outValue;  // Value to encode into first byte of
-                           // outgoing IR packet before transmitting
+      // Total length of the outgoing packet in ir_send_packet_buffer. Face
+      // value + datagram + checksum.
+      uint8_t outgoingPacketLen = 1 + face->outDatagramLen + 1;
 
-      // Ok, it is time to send something on this face
-      // Do we have a pending datagram? If so, add it to outgoing data.
+      // Ok, it is time to send something on this face.
 
-      if (face->outDatagramLen) {
-        // Build a datagram into the outgoing buffer including checksum
+      memcpy(ir_send_packet_buffer, &face->outValue, outgoingPacketLen - 1);
 
-        uint8_t *d =
-            ir_send_packet_buffer + 1;  // Data goes after the face value
-        const uint8_t *s =
-            face->outDatagramData;  // Just to convert from void to uint8_t
+      // Compute and set checksum.
+      ir_send_packet_buffer[outgoingPacketLen - 1] =
+          computePacketChecksum(ir_send_packet_buffer, outgoingPacketLen - 1);
 
-        uint8_t datagramPayloadLen = face->outDatagramLen;
-
-        memcpy(d, s, datagramPayloadLen);
-
-        // First face value, then payload, then checksum
-        ir_send_packet_buffer[1 + datagramPayloadLen] =
-            computePacketChecksum(s, datagramPayloadLen);
-
-        outgoingPacketLen =
-            1 + datagramPayloadLen +
-            1;  // include header byte + payload + checksum (header added below)
-
-        // Note that the outgoing datagram buffer will be cleared below if the
-        // IR send succeeds
-
-      } else {
-        // Just send the face value
-        outgoingPacketLen = 1;
-      }
-
-      // Encode the header byte with the parity and viral button flag
-
-      uint8_t encodedIrValue;
-
+      // Encode the checksum byte with the viral button flag.
       if (TBI(viralButtonPressSendOnFaceBitflags, f)) {
         // We need to send the viral button press on this face right now
 
-        encodedIrValue = irValueEncode(outgoiungPacketHeaderValue, 1);
+        ir_send_packet_buffer[outgoingPacketLen - 1] |= 0b10000000;
 
         CBI(viralButtonPressSendOnFaceBitflags, f);
 
       } else {
-        encodedIrValue = irValueEncode(outgoiungPacketHeaderValue, 0);
+        ir_send_packet_buffer[outgoingPacketLen - 1] &= 0b01111111;
       }
-
-      ir_send_packet_buffer[0] =
-          encodedIrValue;  // store the encoded header into the outgoing buffer
 
       if (blinkbios_irdata_send_packet(f, ir_send_packet_buffer,
                                        outgoingPacketLen)) {
-        // Here we set a timeout to keep periodically probing on this face, but
-        // if there is a neighbor, they will send back to us as soon as they get
-        // what we just transmitted, which will make us immediately send again.
-        // So the only case when this probe timeout will happen is if there is
-        // no neighbor there.
+        // Here we set a timeout to keep periodically probing on this face,
+        // but if there is a neighbor, they will send back to us as soon as
+        // they get what we just transmitted, which will make us immediately
+        // send again. So the only case when this probe timeout will happen is
+        // if there is no neighbor there.
 
-        // If ir_send_userdata() returns 0, then we could not send becuase there
-        // was an RX in progress on this face. Because we do not reset the
-        // sentTime in that case, we will automatically try again next pass.
+        // If ir_send_userdata() returns 0, then we could not send becuase
+        // there was an RX in progress on this face. Because we do not reset
+        // the sentTime in that case, we will automatically try again next
+        // pass.
 
         // We add the face index here to try to spread the sends out in time
-        // otherwise the degenerate case is that they can all happen repeatedly
-        // in the same pass thugh loop() every time when there are no neighbors.
+        // otherwise the degenerate case is that they can all happen
+        // repeatedly in the same pass thugh loop() every time when there are
+        // no neighbors.
 
         face->sendTime = blinklib::time::now + TX_PROBE_TIME_MS + f;
 
@@ -771,25 +638,16 @@ bool isAlone() {
 // By default we power up in state 0.
 
 void setValueSentOnAllFaces(byte value) {
-  if (value > IR_DATA_VALUE_MAX) {
-    value = IR_DATA_VALUE_MAX;
-  }
-
   FOREACH_FACE(f) { faces[f].outValue = value; }
 }
 
 // Set our broadcasted state on indicated face to newState.
-// This state is repeatedly broadcast to the partner tile on the indicated face.
+// This state is repeatedly broadcast to the partner tile on the indicated
+// face.
 
 // By default we power up in state 0.
 
-void setValueSentOnFace(byte value, byte face) {
-  if (value > IR_DATA_VALUE_MAX) {
-    value = IR_DATA_VALUE_MAX;
-  }
-
-  faces[face].outValue = value;
-}
+void setValueSentOnFace(byte value, byte face) { faces[face].outValue = value; }
 
 // --------------Button code
 
@@ -841,8 +699,8 @@ bool buttonLongPressed(void) {
 
 // 6 second press. Note that this will trigger seed mode if the blink is alone
 // so you will only ever see this if blink has neighbors when the button hits
-// the 6 second mark. Remember that a long press fires while the button is still
-// down
+// the 6 second mark. Remember that a long press fires while the button is
+// still down
 bool buttonLongLongPressed(void) {
   return grabandclearbuttonflag(BUTTON_BITFLAG_3SECPRESSED);
 }
@@ -945,16 +803,16 @@ void randomize() {
          // We also ignore 1 to stay balanced since 0 is a valid possible TCNT
          // value that we will ignore
     rand_state <<= 1;
-    rand_state |=
-        blinkbios_pixel_block.capturedEntropy &
-        0x01;  // Grab just the bottom bit each time to try and maximum entropy
+    rand_state |= blinkbios_pixel_block.capturedEntropy &
+                  0x01;  // Grab just the bottom bit each time to try and
+                         // maximum entropy
   }
 
   wdt_disable();
 }
 
-// Note that rand executes the shift feedback register before returning the next
-// result so hopefully we will be spreading out the entropy we get from
+// Note that rand executes the shift feedback register before returning the
+// next result so hopefully we will be spreading out the entropy we get from
 // randomize() on the first invokaton.
 
 static uint32_t nextrand32() {
@@ -993,8 +851,8 @@ word random(uint16_t limit) {
 
     The original Arduino map function which is wrong in at least 3 ways.
 
-    We replace it with a map function that has proper types, does not overflow,
-   has even distribution, and clamps the output range.
+    We replace it with a map function that has proper types, does not
+   overflow, has even distribution, and clamps the output range.
 
     Our code is based on this...
 
@@ -1006,14 +864,14 @@ word random(uint16_t limit) {
 
     In the casts, we try to keep everything at the smallest possible width as
    long as possible to hold the result, but we have to bump up to do the
-   multiply. We then cast back down to (word) once we divide the (uint32_t) by a
-   (word) since we know that will fit.
+   multiply. We then cast back down to (word) once we divide the (uint32_t) by
+   a (word) since we know that will fit.
 
-    We could trade code for performance here by special casing out each possible
-   overflow condition and reordering the operations to avoid the overflow, but
-   for now space more important than speed. User programs can alwasy implement
-   thier own map() if they need it since this will not link in if it is not
-   called.
+    We could trade code for performance here by special casing out each
+   possible overflow condition and reordering the operations to avoid the
+   overflow, but for now space more important than speed. User programs can
+   alwasy implement thier own map() if they need it since this will not link
+   in if it is not called.
 
     Here is some example code on how you might efficiently handle those
    multiplys...
@@ -1036,8 +894,9 @@ word map(word x, word in_min, word in_max, word out_min, word out_max) {
     if ((in_max - in_min) > (out_max - out_min)) {
       // round up if mapping bigger ranges to smaller ranges
       // the only time we need full width to avoid overflow is after the
-      // multiply but before the divide, and the single (uint32_t) of the first
-      // operand should promote the entire expression - hopefully optimally.
+      // multiply but before the divide, and the single (uint32_t) of the
+      // first operand should promote the entire expression - hopefully
+      // optimally.
       return (word)(((uint32_t)(x - in_min)) * (out_max - out_min + 1) /
                     (in_max - in_min + 1)) +
              out_min;
@@ -1045,8 +904,9 @@ word map(word x, word in_min, word in_max, word out_min, word out_max) {
     } else {
       // round down if mapping smaller ranges to bigger ranges
       // the only time we need full width to avoid overflow is after the
-      // multiply but before the divide, and the single (uint32_t) of the first
-      // operand should promote the entire expression - hopefully optimally.
+      // multiply but before the divide, and the single (uint32_t) of the
+      // first operand should promote the entire expression - hopefully
+      // optimally.
       return (word)(((uint32_t)(x - in_min)) * (out_max - out_min) /
                     (in_max - in_min)) +
              out_min;
@@ -1239,8 +1099,9 @@ void __attribute__((noreturn)) run(void) {
       1;  // Clear any old wakes (wokeFlag is cleared to 0 on wake)
 
   blinklib::time::updateNow();  // Initialize out internal millis so that when
-                                // we reset the warm sleep counter it is right,
-                                // and so setup sees the right millis time
+                                // we reset the warm sleep counter it is
+                                // right, and so setup sees the right millis
+                                // time
   reset_warm_sleep_timer();
 
   statckwatcher_init();  // Set up the sentinel byte at the top of RAM used by
@@ -1257,19 +1118,19 @@ void __attribute__((noreturn)) run(void) {
     }
 
     // Here we check to enter seed mode. The button must be held down for 6
-    // seconds and we must not have any neighbors Note that we directly read the
-    // shared block rather than our snapshot. This lets the 6 second flag latch
-    // and so to the user program if we do not enter seed mode because we have
-    // neighbors. See?
+    // seconds and we must not have any neighbors Note that we directly read
+    // the shared block rather than our snapshot. This lets the 6 second flag
+    // latch and so to the user program if we do not enter seed mode because
+    // we have neighbors. See?
 
     if ((blinkbios_button_block.bitflags & BUTTON_BITFLAG_3SECPRESSED) &&
         isAlone() && !sterileFlag) {
       // Button has been down for 6 seconds and we are alone...
       // Signal that we are about to go into seed mode with full blue...
 
-      // First save the game pixels because our blue seed spin is going to mess
-      // them up and we will need to get them back if the user continues to hold
-      // past the seed phase and into the warm sleep phase.
+      // First save the game pixels because our blue seed spin is going to
+      // mess them up and we will need to get them back if the user continues
+      // to hold past the seed phase and into the warm sleep phase.
 
       savePixels();
 
