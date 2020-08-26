@@ -183,6 +183,8 @@ uint8_t viralButtonPressSendOnFaceBitflags;   // A 1 here means send the viral b
 
 Timer viralButtonPressLockoutTimer;     // Set each time we send a viral button press to avoid sending getting into a circular loop
 
+unsigned long millis() { return blinklib::time::now; }
+
 // Returns the inverted checksum of all bytes
 
 uint8_t computePacketChecksum( volatile const uint8_t *buffer , uint8_t len ) {
