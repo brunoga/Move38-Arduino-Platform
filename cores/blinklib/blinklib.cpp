@@ -104,9 +104,9 @@ struct face_t {
   millis_t expireTime;  // When this face will be considered to be expired (no
                         // neighbor there)
 
-  uint8_t outValue;        // Value we send out on this face
-  uint8_t outDatagramLen;  // 0= No datagram waiting to be sent
+  uint8_t outValue;  // Value we send out on this face
   uint8_t outDatagramData[IR_DATAGRAM_LEN];
+  uint8_t outDatagramLen;  // 0= No datagram waiting to be sent
 
   millis_t
       sendTime;  // Next time we will transmit on this face (set to 0 every time
@@ -470,7 +470,7 @@ static void RX_IRFaces() {
           // Validate checksum.
           byte checksum = packetData[packetDataLen - 1];
           if (computePacketChecksum(packetData, packetDataLen - 1) ==
-              checksum) {
+              (checksum & 0b01111111)) {
             // If we get here, then we know this is a valid packet
 
             // Clear to send on this face immediately to ping-pong
@@ -487,6 +487,10 @@ static void RX_IRFaces() {
               // We also need to extend hardware sleep
               // since we did not get a physical button press
               BLINKBIOS_POSTPONE_SLEEP_VECTOR();
+            }
+
+            if (packetDataLen > 2) {
+              face->inDatagramLen = packetDataLen - 2;
             }
 
             memcpy(&face->inValue, (const void *)packetData, packetDataLen - 1);
