@@ -166,15 +166,18 @@ static uint8_t irValueDecodePostponeSleepFlag( uint8_t d ) {
 struct face_t {
 
     uint8_t inValue;        // Last received value on this face, or 0 if no neighbor ever seen since startup
-    uint8_t outValue;       // Value we send out on this face
-    millis_t expireTime;    // When this face will be considered to be expired (no neighbor there)
-    millis_t sendTime;      // Next time we will transmit on this face (set to 0 every time we get a good message so we ping-pong across the link)
-    
-    uint8_t inDatagramLen;  // 0= No datagram waiting to be read
     uint8_t inDatagramData[IR_DATAGRAM_LEN];
+    uint8_t inDatagramLen;  // 0= No datagram waiting to be read
 
+    millis_t expireTime;  // When this face will be considered to be expired (no
+                          // neighbor there)
+
+    uint8_t outValue;       // Value we send out on this face
     uint8_t outDatagramLen;  // 0= No datagram waiting to be sent
     uint8_t outDatagramData[IR_DATAGRAM_LEN];
+
+    millis_t sendTime;      // Next time we will transmit on this face (set to 0 every time we get a good message so we ping-pong across the link)
+
 };
 
 static face_t faces[FACE_COUNT];
