@@ -563,29 +563,27 @@ static void TX_IRFaces() {
 
       if (blinkbios_irdata_send_packet(f, ir_send_packet_buffer,
                                        outgoingPacketLen)) {
-        // Here we set a timeout to keep periodically probing on this face,
-        // but if there is a neighbor, they will send back to us as soon as
-        // they get what we just transmitted, which will make us immediately
-        // send again. So the only case when this probe timeout will happen is
-        // if there is no neighbor there.
+        // If ir_send_userdata() returns 0, then we could not send because
+        // there was an RX in progress on this face. In this case we will send
+        // this packet again when the ongoing transfer finishes.
 
-        // If ir_send_userdata() returns 0, then we could not send becuase
-        // there was an RX in progress on this face. Because we do not reset
-        // the sentTime in that case, we will automatically try again next
-        // pass.
-
-        // We add the face index here to try to spread the sends out in time
-        // otherwise the degenerate case is that they can all happen
-        // repeatedly in the same pass thugh loop() every time when there are
-        // no neighbors.
-
-        face->sendTime = blinklib::time::now + TX_PROBE_TIME_MS + f;
-
-        // Mark any pending datagram as sent
-        // safe to do this blindly because datagram always gets priority so it
-        // would have been what was just sent if there was one pending
+        // Mark datagram as sent.
         face->outDatagramLen = 0;
       }
+
+      // Here we set a timeout to keep periodically probing on this face,
+      // but if there is a neighbor, they will send back to us as soon as
+      // they get what we just transmitted, which will make us immediately
+      // send again. So the only case when this probe timeout will happen is
+      // if there is no neighbor there or if transmitting a datagram took more
+      // time than the probe timeout (which will happen with big datagrams).
+
+      // We add the face index here to try to spread the sends out in time
+      // otherwise the degenerate case is that they can all happen
+      // repeatedly in the same pass thugh loop() every time when there are
+      // no neighbors.
+
+      face->sendTime = blinklib::time::now + TX_PROBE_TIME_MS + f;
 
     }  // if ( face->sendTime <= now )
 
