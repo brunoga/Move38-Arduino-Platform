@@ -131,10 +131,10 @@ unsigned long millis() { return blinklib::time::now; }
 
 // Returns a 6-bit inverted checksum of all bytes
 
-uint8_t computePacketChecksum(volatile const uint8_t *buffer, uint8_t len) {
-  uint8_t computedChecksum = 0;
+byte computePacketChecksum(volatile const byte *buffer, byte len) {
+  byte computedChecksum = 0;
 
-  for (uint8_t l = 0; l < len; l++) {
+  for (byte l = 0; l < len; l++) {
     computedChecksum = (computedChecksum + buffer[l]) & 0b00111111;
   }
 
@@ -149,7 +149,7 @@ uint8_t computePacketChecksum(volatile const uint8_t *buffer, uint8_t len) {
 
 byte getDatagramLengthOnFace(uint8_t face) { return faces[face].inDatagramLen; }
 
-boolean isDatagramReadyOnFace(uint8_t face) {
+bool isDatagramReadyOnFace(uint8_t face) {
   return getDatagramLengthOnFace(face) != 0;
 }
 
@@ -161,8 +161,7 @@ void markDatagramReadOnFace(uint8_t face) { faces[face].inDatagramLen = 0; }
 
 // Jump to the send packet function all way up in the bootloader
 
-uint8_t blinkbios_irdata_send_packet(uint8_t face, const uint8_t *data,
-                                     uint8_t len) {
+byte blinkbios_irdata_send_packet(byte face, const byte *data, byte len) {
   // Call directly into the function in the bootloader. This symbol is resolved
   // by the linker to a direct call to the target address.
   return BLINKBIOS_IRDATA_SEND_PACKET_VECTOR(face, data, len);
@@ -448,7 +447,7 @@ static void RX_IRFaces() {
   face_t *face = faces;
   volatile ir_rx_state_t *ir_rx_state = blinkbios_irdata_block.ir_rx_states;
 
-  for (uint8_t f = 0; f < FACE_COUNT; f++) {
+  for (byte f = 0; f < FACE_COUNT; f++) {
     // Check for anything new coming in...
 
     // Reset the datagram received state so we will have the correct state in
@@ -542,7 +541,7 @@ static void RX_IRFaces() {
 // This is the easy way to do this, but uses RAM unnecessarily.
 // TODO: Make a scatter version of this to save RAM & time
 
-static uint8_t
+static byte
     ir_send_packet_buffer[IR_DATAGRAM_LEN + 2];  // header byte + Datagram
                                                  // payload  + checksum byte
 
@@ -550,7 +549,7 @@ static void TX_IRFaces() {
   //  Use these pointers to step though the arrays
   face_t *face = faces;
 
-  for (uint8_t f = 0; f < FACE_COUNT; f++) {
+  for (byte f = 0; f < FACE_COUNT; f++) {
     // Send one out too if it is time....
 
     if (face->sendTime <= blinklib::time::now) {  // Time to send on this face?
@@ -560,7 +559,7 @@ static void TX_IRFaces() {
 
       // Total length of the outgoing packet in ir_send_packet_buffer. Face
       // value + datagram + checksum.
-      uint8_t outgoingPacketLen = 1 + face->outDatagramLen + 1;
+      byte outgoingPacketLen = 1 + face->outDatagramLen + 1;
 
       // Ok, it is time to send something on this face.
 
@@ -629,7 +628,7 @@ byte getLastValueReceivedOnFace(byte face) { return faces[face].inValue; }
 // Remember that getNeighborState starts at 0 on powerup.
 // Note the a face expiring has no effect on the getNeighborState()
 
-byte didValueOnFaceChange(byte face) {
+bool didValueOnFaceChange(byte face) {
   static byte prevState[FACE_COUNT];
 
   byte curState = getLastValueReceivedOnFace(face);
@@ -642,7 +641,7 @@ byte didValueOnFaceChange(byte face) {
   return true;
 }
 
-byte isValueReceivedOnFaceExpired(byte face) {
+bool isValueReceivedOnFaceExpired(byte face) {
   return faces[face].expireTime < blinklib::time::now;
 }
 
@@ -694,11 +693,9 @@ static bool grabandclearbuttonflag(uint8_t flagbit) {
   return r;
 }
 
-bool buttonPressed(void) {
-  return grabandclearbuttonflag(BUTTON_BITFLAG_PRESSED);
-}
+bool buttonPressed() { return grabandclearbuttonflag(BUTTON_BITFLAG_PRESSED); }
 
-bool buttonReleased(void) {
+bool buttonReleased() {
   return grabandclearbuttonflag(BUTTON_BITFLAG_RELEASED);
 }
 
@@ -716,10 +713,10 @@ bool buttonMultiClicked() {
 
 // The number of clicks in the longest consecutive valid click cycle since the
 // last time called.
-byte buttonClickCount(void) { return buttonSnapshotClickcount; }
+byte buttonClickCount() { return buttonSnapshotClickcount; }
 
 // Remember that a long press fires while the button is still down
-bool buttonLongPressed(void) {
+bool buttonLongPressed() {
   return grabandclearbuttonflag(BUTTON_BITFLAG_LONGPRESSED);
 }
 
@@ -727,7 +724,7 @@ bool buttonLongPressed(void) {
 // so you will only ever see this if blink has neighbors when the button hits
 // the 6 second mark. Remember that a long press fires while the button is
 // still down
-bool buttonLongLongPressed(void) {
+bool buttonLongLongPressed() {
   return grabandclearbuttonflag(BUTTON_BITFLAG_3SECPRESSED);
 }
 
@@ -967,17 +964,17 @@ byte getBlinkbiosVersion() { return BLINKBIOS_VERSION_VECTOR(); }
 // Best to check as last test at the end of loop() so you can
 // avoid intermediate display upon waking.
 
-uint8_t hasWoken(void) {
-  uint8_t ret = 0;
+bool hasWoken() {
+  bool ret = false;
 
   if (hasWarmWokenFlag) {
-    ret = 1;
+    ret = true;
     hasWarmWokenFlag = 0;
   }
 
   if (blinkbios_button_block.wokeFlag ==
       0) {  // This flag is set to 0 when waking!
-    ret = 1;
+    ret = true;
     blinkbios_button_block.wokeFlag = 1;
   }
 

@@ -50,12 +50,12 @@ byte getLastValueReceivedOnFace( byte face );
 
 // Note the a face expiring has no effect on the last value
 
-byte didValueOnFaceChange( byte face );
+bool didValueOnFaceChange( byte face );
 
 // false if messages have been recently received on the indicated face
 // (currently configured to 100ms timeout in `expireDurration_ms` )
 
-byte isValueReceivedOnFaceExpired( byte face );
+bool isValueReceivedOnFaceExpired( byte face );
 
 // Returns false if their has been a neighbor seen recently on any face, returns true otherwise.
 bool isAlone();
@@ -85,7 +85,7 @@ void setValueSentOnAllFaces( byte value );
 byte getDatagramLengthOnFace( uint8_t face );
 
 // Returns true if a packet is available in the buffer
-boolean isDatagramReadyOnFace( uint8_t face );
+bool isDatagramReadyOnFace( uint8_t face );
 
  // Returns a pointer to the actual received datagram data
  // This should really be a (void *) so it can be assigned to any pointer type,
@@ -153,15 +153,15 @@ bool buttonMultiClicked();
 
 
 // The number of clicks in the longest consecutive valid click cycle since the last time called.
-byte buttonClickCount(void);
+byte buttonClickCount();
 
 // Remember that a long press fires while the button is still down
-bool buttonLongPressed(void);
+bool buttonLongPressed();
 
 // 6 second press. Note that this will trigger seed mode if the blink is alone so
 // you will only ever see this if blink has neighbors when the button hits the 6 second mark.
 // Remember that a long press fires while the button is still down
-bool buttonLongLongPressed(void);
+bool buttonLongLongPressed();
 
 /*
 
@@ -347,7 +347,7 @@ byte sin8_C( byte theta);
 
 // Returns 1 if we have woken from sleep since last time we checked
 
-uint8_t hasWoken(void);
+bool hasWoken();
 
 // Information on how the current game was loaded
 
@@ -355,7 +355,7 @@ uint8_t hasWoken(void);
 #define START_STATE_WE_ARE_ROOT         1   // Completed sending a download seed (running built-in game)
 #define START_STATE_DOWNLOAD_SUCCESS    2   // Completed receiving a downloaded game (running the downloaded game)
 
-uint8_t startState(void);
+byte startState(void);
 
 // Make the current game sterile so that it can not be propagated to other blinks (niche) 
 // If sterileFlag==1 then holding the button down will never enter seed mode, it will just eventually sleep. 
