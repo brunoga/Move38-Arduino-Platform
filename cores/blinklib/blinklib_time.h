@@ -13,6 +13,8 @@ void updateNow();
 
 millis_t millis();
 
+millis_t currentMillis();
+
 }  // namespace time
 
 }  // namespace blinklib
