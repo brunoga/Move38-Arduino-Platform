@@ -585,6 +585,8 @@ static void TX_IRFaces() {
         // Guaranteed delivery: If we received on this face this iteration, let
         // the connected Blink know by setting the relevant bit.
         ir_send_packet_buffer[outgoingPacketLen - 1] |= 0b01000000;
+      } else {
+        ir_send_packet_buffer[outgoingPacketLen - 1] &= 0b10111111;
       }
 
       // Send packet ignoring return value (see below).
