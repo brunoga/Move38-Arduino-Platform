@@ -111,6 +111,9 @@ struct face_t {
   millis_t
       sendTime;  // Next time we will transmit on this face (set to 0 every time
                  // we get a good message so we ping-pong across the link)
+
+  bool received;  // True if a datagram was received on this face in this loop()
+                  // iteration. Used for guaranteed delivery.
 };
 
 static face_t faces[FACE_COUNT];
@@ -126,16 +129,16 @@ Timer viralButtonPressLockoutTimer;  // Set each time we send a viral button
 
 unsigned long millis() { return blinklib::time::now; }
 
-// Returns the inverted checksum of all bytes
+// Returns a 6-bit inverted checksum of all bytes
 
 uint8_t computePacketChecksum(volatile const uint8_t *buffer, uint8_t len) {
   uint8_t computedChecksum = 0;
 
   for (uint8_t l = 0; l < len; l++) {
-    computedChecksum = (computedChecksum + buffer[l]) & 0b01111111;
+    computedChecksum = (computedChecksum + buffer[l]) & 0b00111111;
   }
 
-  return computedChecksum ^ 0b01111111;
+  return computedChecksum ^ 0b00111111;
 }
 
 #if ((IR_LONG_PACKET_MAX_LEN + 3) > IR_RX_PACKET_SIZE)
@@ -448,6 +451,10 @@ static void RX_IRFaces() {
   for (uint8_t f = 0; f < FACE_COUNT; f++) {
     // Check for anything new coming in...
 
+    // Reset the datagram received state so we will have the correct state in
+    // case we do not receive a datagram now.
+    face->received = false;
+
     if (ir_rx_state->packetBufferReady) {
       // Got something, so we know there is someone out there
       // TODO: Should we require the received packet to pass error checks?
@@ -468,10 +475,20 @@ static void RX_IRFaces() {
 
         if (packetDataLen > 1) {
           // Validate checksum.
-          byte checksum = packetData[packetDataLen - 1];
+          byte checksum =
+              packetData[packetDataLen -
+                         1];  // The 2 top bits are not part of the checksum.
           if (computePacketChecksum(packetData, packetDataLen - 1) ==
-              (checksum & 0b01111111)) {
+              (checksum & 0b00111111)) {
             // If we get here, then we know this is a valid packet
+
+            if ((checksum & 0b01000000) != 0) {
+              // Guaranteed delivery: If this bit is set on the message we just
+              // got, it means that the message we sent the previous loop
+              // iterationm was received. So we reset the outgoing datagram
+              // length here to indicate delivery.
+              face->outDatagramLen = 0;
+            }
 
             // Clear to send on this face immediately to ping-pong
             // messages at max speed without collisions
@@ -491,6 +508,10 @@ static void RX_IRFaces() {
 
             if (packetDataLen > 2) {
               face->inDatagramLen = packetDataLen - 2;
+
+              // Guaranteed delivery: We received a datagram, so record this
+              // information.
+              face->received = true;
             }
 
             memcpy(&face->inValue, (const void *)packetData, packetDataLen - 1);
@@ -561,15 +582,22 @@ static void TX_IRFaces() {
         ir_send_packet_buffer[outgoingPacketLen - 1] &= 0b01111111;
       }
 
-      if (blinkbios_irdata_send_packet(f, ir_send_packet_buffer,
-                                       outgoingPacketLen)) {
-        // If ir_send_userdata() returns 0, then we could not send because
-        // there was an RX in progress on this face. In this case we will send
-        // this packet again when the ongoing transfer finishes.
-
-        // Mark datagram as sent.
-        face->outDatagramLen = 0;
+      if (face->received) {
+        // Guaranteed delivery: If we received on this face this iteration, let
+        // the connected Blink know by setting the relevant bit.
+        ir_send_packet_buffer[outgoingPacketLen - 1] |= 0b01000000;
       }
+
+      // Send packet ignoring return value (see below).
+      blinkbios_irdata_send_packet(f, ir_send_packet_buffer, outgoingPacketLen);
+
+      // If the above returns 0, then we could not send because there was an RX
+      // in progress on this face. In this case we will send this packet again
+      // when the ongoing transfer finishes.
+
+      // Guaranteed delivery: If it returns non-zero, we can not be sure the
+      // datagream was received at the other end so we wait for confirmation
+      // before marking the data as sent.
 
       // Here we set a timeout to keep periodically probing on this face,
       // but if there is a neighbor, they will send back to us as soon as
@@ -577,14 +605,10 @@ static void TX_IRFaces() {
       // send again. So the only case when this probe timeout will happen is
       // if there is no neighbor there or if transmitting a datagram took more
       // time than the probe timeout (which will happen with big datagrams).
-
-      // We add the face index here to try to spread the sends out in time
-      // otherwise the degenerate case is that they can all happen
-      // repeatedly in the same pass thugh loop() every time when there are
-      // no neighbors.
-
-      face->sendTime = blinklib::time::now + TX_PROBE_TIME_MS;
-
+      // Note we are using the "real" time here to offset the actual time it
+      // takes to send the datagram (16 byte datagrams take up to 65 ms to
+      // transmit currently).
+      face->sendTime = blinklib::time::currentMillis() + TX_PROBE_TIME_MS;
     }  // if ( face->sendTime <= now )
 
     face++;
