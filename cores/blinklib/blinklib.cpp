@@ -484,7 +484,7 @@ static void RX_IRFaces() {
             if ((checksum & 0b01000000) != 0) {
               // Guaranteed delivery: If this bit is set on the message we just
               // got, it means that the message we sent the previous loop
-              // iterationm was received. So we reset the outgoing datagram
+              // iteration was received. So we reset the outgoing datagram
               // length here to indicate delivery.
               face->outDatagramLen = 0;
             }
@@ -528,7 +528,15 @@ static void RX_IRFaces() {
 
       // No matter what, mark buffer as read so we can get next packet
       ir_rx_state->packetBufferReady = 0;
+    } else if (blinkbios_is_rx_in_progress(f)) {
+      // We did not receive any data this iteration but we just noticed there is
+      // a transfer in progress, so we extend our deadline as eventually it wil
+      // complete and we will receive the packet and then send ours.
+      face->sendTime = blinklib::time::now + TX_PROBE_TIME_MS;
 
+      // We can also extend our face expiration for the same reason as above. We
+      // know there is someoen out there.
+      face->expireTime = blinklib::time::now + RX_EXPIRE_TIME_MS;
     }  // if ( ir_data_buffer->ready_flag )
 
     face++;
@@ -1131,10 +1139,6 @@ void __attribute__((noreturn)) run(void) {
 
   statckwatcher_init();  // Set up the sentinel byte at the top of RAM used by
                          // variables so we can tell if stack clobbered it
-
-  // TODO(bga): This is cheating but adding this call *DECREASES* the resulting
-  // flash storage by a considerable amount. Needs investigation.
-  setColor(OFF);
 
   setup();
 
