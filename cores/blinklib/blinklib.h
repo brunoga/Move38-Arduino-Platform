@@ -18,6 +18,9 @@
 #ifndef BLINKLIB_H_
 #define BLINKLIB_H_
 
+// Define this so programs can require this specific version.
+#define BGA_CUSTOM_BLINKLIB
+
 #include <limits.h>         // UINTLONG_MAX for NEVER
 #include "ArduinoTypes.h"
 
