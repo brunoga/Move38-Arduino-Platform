@@ -172,17 +172,17 @@ uint8_t blinkbios_irdata_send_packet(uint8_t face, const uint8_t *data,
 #define CBI(x, b) (x &= ~(1 << b))  // Clear bit
 #define TBI(x, b) (x & (1 << b))    // Test bit
 
-void sendDatagramOnFace(const void *data, byte len, byte face) {
-  if (len > IR_DATAGRAM_LEN) {
-    // Ignore request to send oversized packet
-
-    return;
-  }
+bool sendDatagramOnFace(const void *data, byte len, byte face) {
+  if (len > IR_DATAGRAM_LEN) return false;
 
   face_t *f = &faces[face];
 
+  if (f->outDatagramLen != 0) return false;
+
   f->outDatagramLen = len;
   memcpy(f->outDatagramData, data, len);
+
+  return true;
 }
 
 static void clear_packet_buffers() {
@@ -1132,6 +1132,10 @@ void __attribute__((noreturn)) run(void) {
 
   statckwatcher_init();  // Set up the sentinel byte at the top of RAM used by
                          // variables so we can tell if stack clobbered it
+
+  // TODO(bga): This is cheating but adding this call *DECREASES* the resulting
+  // flash storage by a considerable amount. Needs investigation.
+  setColor(OFF);
 
   setup();
 
