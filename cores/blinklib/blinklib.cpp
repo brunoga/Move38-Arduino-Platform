@@ -156,17 +156,19 @@ byte computePacketChecksum(volatile const byte *buffer, byte len) {
 
 #endif
 
-byte getDatagramLengthOnFace(uint8_t face) { return faces[face].inDatagramLen; }
+byte getDatagramLengthOnFace(byte face) { return faces[face].inDatagramLen; }
 
-bool isDatagramReadyOnFace(uint8_t face) {
+bool isDatagramReadyOnFace(byte face) {
   return getDatagramLengthOnFace(face) != 0;
 }
 
-const byte *getDatagramOnFace(uint8_t face) {
-  return faces[face].inDatagramData;
+bool isDatagramPendingOnFace(byte face) {
+  return faces[face].outDatagramLen != 0;
 }
 
-void markDatagramReadOnFace(uint8_t face) { faces[face].inDatagramLen = 0; }
+const byte *getDatagramOnFace(byte face) { return faces[face].inDatagramData; }
+
+void markDatagramReadOnFace(byte face) { faces[face].inDatagramLen = 0; }
 
 // Jump to the send packet function all way up in the bootloader
 

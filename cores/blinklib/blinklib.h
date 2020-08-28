@@ -82,24 +82,27 @@ void setValueSentOnAllFaces( byte value );
 #define IR_DATAGRAM_LEN 16
 
 // Returns the number of bytes waiting in the data buffer, or 0 if no packet ready.
-byte getDatagramLengthOnFace( uint8_t face );
+byte getDatagramLengthOnFace( byte face );
 
-// Returns true if a packet is available in the buffer
-bool isDatagramReadyOnFace( uint8_t face );
+// Returns true if a packet is available in the buffer.
+bool isDatagramReadyOnFace( byte face );
+
+// Returns true is a packet is pending to be sent on the given face.
+bool isDatagramPendingOnFace ( byte face );
 
  // Returns a pointer to the actual received datagram data
  // This should really be a (void *) so it can be assigned to any pointer type,
  // but in C++ you can not cast a (void *) into something else so it doesn't really work there
  // and I think too ugly to have these functions that are inverses of each other to take/return different types.
  // Thanks, Stroustrup.
-const byte *getDatagramOnFace( uint8_t face );
+const byte *getDatagramOnFace( byte face );
 
 // Frees up the buffer holding the datagram data. Do this as soon as possible after you have
 // processed the datagram to free up the slot for the next incoming datagram on this face.
 // If a new datagram is recieved on a face before markDatagramReadOnFace() is called then
 // the new datagram is siliently discarded. 
 
-void markDatagramReadOnFace( uint8_t face );
+void markDatagramReadOnFace( byte face );
 
 // Send a datagram.  
 // Datagram is sent as soon as possible and takes priority over sending a value on face.
