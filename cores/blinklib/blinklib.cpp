@@ -95,25 +95,34 @@
 // All semantics chosen to have sane startup 0 so we can
 // keep this in bss section and have it zeroed out at startup.
 
+// Guaranteed delivery: Keeps track of the current datagarm sequence and the
+// sequence we are sending acks to.
+union header_t {
+  struct {
+    byte sequence : 4;
+    byte ack_sequence : 4;
+  };
+
+  byte as_byte;
+};
+
 struct face_t {
-  uint8_t inValue;  // Last received value on this face, or 0 if no neighbor
-                    // ever seen since startup
-  uint8_t inDatagramData[IR_DATAGRAM_LEN];
-  uint8_t inDatagramLen;  // 0= No datagram waiting to be read
+  byte inValue;  // Last received value on this face, or 0 if no neighbor
+                 // ever seen since startup
+  byte inDatagramData[IR_DATAGRAM_LEN];
+  byte inDatagramLen;  // 0= No datagram waiting to be read
 
   millis_t expireTime;  // When this face will be considered to be expired (no
                         // neighbor there)
 
-  uint8_t outValue;  // Value we send out on this face
-  uint8_t outDatagramData[IR_DATAGRAM_LEN];
-  uint8_t outDatagramLen;  // 0= No datagram waiting to be sent
+  byte outValue;  // Value we send out on this face
+  header_t header;
+  byte outDatagramData[IR_DATAGRAM_LEN];
+  byte outDatagramLen;  // 0= No datagram waiting to be sent
 
   millis_t
       sendTime;  // Next time we will transmit on this face (set to 0 every time
                  // we get a good message so we ping-pong across the link)
-
-  bool received;  // True if a datagram was received on this face in this loop()
-                  // iteration. Used for guaranteed delivery.
 };
 
 static face_t faces[FACE_COUNT];
@@ -129,16 +138,16 @@ Timer viralButtonPressLockoutTimer;  // Set each time we send a viral button
 
 unsigned long millis() { return blinklib::time::now; }
 
-// Returns a 6-bit inverted checksum of all bytes
+// Returns a 7-bit inverted checksum of all bytes
 
 byte computePacketChecksum(volatile const byte *buffer, byte len) {
   byte computedChecksum = 0;
 
   for (byte l = 0; l < len; l++) {
-    computedChecksum = (computedChecksum + buffer[l]) & 0b00111111;
+    computedChecksum = (computedChecksum + buffer[l]) & 0b01111111;
   }
 
-  return computedChecksum ^ 0b00111111;
+  return computedChecksum ^ 0b01111111;
 }
 
 #if ((IR_LONG_PACKET_MAX_LEN + 3) > IR_RX_PACKET_SIZE)
@@ -177,6 +186,9 @@ bool sendDatagramOnFace(const void *data, byte len, byte face) {
   face_t *f = &faces[face];
 
   if (f->outDatagramLen != 0) return false;
+
+  // Guaranteed delivery: Increment sequence number.
+  f->header.sequence = (f->header.sequence % 15) + 1;
 
   f->outDatagramLen = len;
   memcpy(f->outDatagramData, data, len);
@@ -450,10 +462,6 @@ static void RX_IRFaces() {
   for (byte f = 0; f < FACE_COUNT; f++) {
     // Check for anything new coming in...
 
-    // Reset the datagram received state so we will have the correct state in
-    // case we do not receive a datagram now.
-    face->received = false;
-
     if (ir_rx_state->packetBufferReady) {
       // Got something, so we know there is someone out there
       // TODO: Should we require the received packet to pass error checks?
@@ -476,18 +484,10 @@ static void RX_IRFaces() {
           // Validate checksum.
           byte checksum =
               packetData[packetDataLen -
-                         1];  // The 2 top bits are not part of the checksum.
+                         1];  // The top bit is not part of the checksum.
           if (computePacketChecksum(packetData, packetDataLen - 1) ==
-              (checksum & 0b00111111)) {
+              (checksum & 0b01111111)) {
             // If we get here, then we know this is a valid packet
-
-            if ((checksum & 0b01000000) != 0) {
-              // Guaranteed delivery: If this bit is set on the message we just
-              // got, it means that the message we sent the previous loop
-              // iteration was received. So we reset the outgoing datagram
-              // length here to indicate delivery.
-              face->outDatagramLen = 0;
-            }
 
             // Clear to send on this face immediately to ping-pong
             // messages at max speed without collisions
@@ -505,15 +505,32 @@ static void RX_IRFaces() {
               BLINKBIOS_POSTPONE_SLEEP_VECTOR();
             }
 
-            if (packetDataLen > 2) {
-              face->inDatagramLen = packetDataLen - 2;
+            // Save face value.
+            face->inValue = packetData[0];
 
-              // Guaranteed delivery: We received a datagram, so record this
-              // information.
-              face->received = true;
+            // Guaranteed delivery: Parse incoming header.
+            header_t incoming_header;
+            incoming_header.as_byte = packetData[1];
+
+            if (incoming_header.ack_sequence == face->header.sequence) {
+              // We received an ack for the datagram we were sending. Mark it as
+              // delivered.
+              face->outDatagramLen = 0;
             }
 
-            memcpy(&face->inValue, (const void *)packetData, packetDataLen - 1);
+            if (packetDataLen > 3) {
+              // We also received a datagram to process.
+              if (incoming_header.sequence != face->header.ack_sequence) {
+                // Looks like a new one. Record it and start sendingf acks for
+                // it.
+                face->header.ack_sequence = incoming_header.sequence;
+                face->inDatagramLen = packetDataLen - 3;
+                memcpy(&face->inDatagramData, (const void *)&packetData[2],
+                       face->inDatagramLen);
+              } else {
+                // Resend. Just ignore it and continue sending ack.
+              }
+            }
           }
         } else {  // packetDataLen == 1
           // Here is look for a magic packet that has 1 bytes
@@ -566,8 +583,8 @@ static void TX_IRFaces() {
       // neighbor shows up or when an IR message gets missed
 
       // Total length of the outgoing packet in ir_send_packet_buffer. Face
-      // value + datagram + checksum.
-      byte outgoingPacketLen = 1 + face->outDatagramLen + 1;
+      // value + header + datagram + checksum.
+      byte outgoingPacketLen = 1 + 1 + face->outDatagramLen + 1;
 
       // Ok, it is time to send something on this face.
 
@@ -587,14 +604,6 @@ static void TX_IRFaces() {
 
       } else {
         ir_send_packet_buffer[outgoingPacketLen - 1] &= 0b01111111;
-      }
-
-      if (face->received) {
-        // Guaranteed delivery: If we received on this face this iteration, let
-        // the connected Blink know by setting the relevant bit.
-        ir_send_packet_buffer[outgoingPacketLen - 1] |= 0b01000000;
-      } else {
-        ir_send_packet_buffer[outgoingPacketLen - 1] &= 0b10111111;
       }
 
       // Send packet ignoring return value (see below).
