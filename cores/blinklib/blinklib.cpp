@@ -486,11 +486,10 @@ static void RX_IRFaces() {
 
         if (packetDataLen > 1) {
           // Validate checksum.
-          byte checksum =
-              packetData[packetDataLen -
-                         1];  // The top bit is not part of the checksum.
+          byte checksum = packetData[packetDataLen - 1];
+
           if (computePacketChecksum(packetData, packetDataLen - 1) ==
-              (checksum & 0b01111111)) {
+              checksum) {
             // If we get here, then we know this is a valid packet
 
             // Clear to send on this face immediately to ping-pong
@@ -588,7 +587,7 @@ static void TX_IRFaces() {
 
       // Total length of the outgoing packet in ir_send_packet_buffer. Face
       // value + header + datagram + checksum.
-      byte outgoingPacketLen = 1 + 1 + face->outDatagramLen + 1;
+      byte outgoingPacketLen = 3 + face->outDatagramLen;
 
       // Ok, it is time to send something on this face.
 
