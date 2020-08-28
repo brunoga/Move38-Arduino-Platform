@@ -95,12 +95,14 @@
 // All semantics chosen to have sane startup 0 so we can
 // keep this in bss section and have it zeroed out at startup.
 
-// Guaranteed delivery: Keeps track of the current datagarm sequence and the
+// Guaranteed delivery: Keeps track of the current datagram sequence and the
 // sequence we are sending acks to.
 union header_t {
   struct {
-    byte sequence : 4;
-    byte ack_sequence : 4;
+    byte sequence : 3;
+    byte ack_sequence : 3;
+    bool unused : 1;
+    bool postpone_sleep : 1;
   };
 
   byte as_byte;
@@ -138,16 +140,16 @@ Timer viralButtonPressLockoutTimer;  // Set each time we send a viral button
 
 unsigned long millis() { return blinklib::time::now; }
 
-// Returns a 7-bit inverted checksum of all bytes
+// Returns a 8-bit inverted checksum of all bytes
 
 byte computePacketChecksum(volatile const byte *buffer, byte len) {
   byte computedChecksum = 0;
 
   for (byte l = 0; l < len; l++) {
-    computedChecksum = (computedChecksum + buffer[l]) & 0b01111111;
+    computedChecksum += buffer[l];
   }
 
-  return computedChecksum ^ 0b01111111;
+  return computedChecksum ^ 0b11111111;
 }
 
 #if ((IR_LONG_PACKET_MAX_LEN + 3) > IR_RX_PACKET_SIZE)
@@ -495,7 +497,14 @@ static void RX_IRFaces() {
             // messages at max speed without collisions
             face->sendTime = 0;
 
-            if ((checksum & 0b10000000) != 0) {
+            // Save face value.
+            face->inValue = packetData[0];
+
+            // Guaranteed delivery: Parse incoming header.
+            header_t incoming_header;
+            incoming_header.as_byte = packetData[1];
+
+            if (incoming_header.postpone_sleep) {
               // The blink on on the other side of this connection
               // is telling us that a button was pressed recently
               // Send the viral message to all neighbors.
@@ -506,13 +515,6 @@ static void RX_IRFaces() {
               // since we did not get a physical button press
               BLINKBIOS_POSTPONE_SLEEP_VECTOR();
             }
-
-            // Save face value.
-            face->inValue = packetData[0];
-
-            // Guaranteed delivery: Parse incoming header.
-            header_t incoming_header;
-            incoming_header.as_byte = packetData[1];
 
             if (incoming_header.ack_sequence == face->header.sequence) {
               // We received an ack for the datagram we were sending. Mark it as
@@ -590,23 +592,15 @@ static void TX_IRFaces() {
 
       // Ok, it is time to send something on this face.
 
+      // Encode the checksum byte with the viral button flag in the header
+      face->header.postpone_sleep = TBI(viralButtonPressSendOnFaceBitflags, f);
+      CBI(viralButtonPressSendOnFaceBitflags, f);
+
       memcpy(ir_send_packet_buffer, &face->outValue, outgoingPacketLen - 1);
 
       // Compute and set checksum.
       ir_send_packet_buffer[outgoingPacketLen - 1] =
           computePacketChecksum(ir_send_packet_buffer, outgoingPacketLen - 1);
-
-      // Encode the checksum byte with the viral button flag.
-      if (TBI(viralButtonPressSendOnFaceBitflags, f)) {
-        // We need to send the viral button press on this face right now
-
-        ir_send_packet_buffer[outgoingPacketLen - 1] |= 0b10000000;
-
-        CBI(viralButtonPressSendOnFaceBitflags, f);
-
-      } else {
-        ir_send_packet_buffer[outgoingPacketLen - 1] &= 0b01111111;
-      }
 
       // Send packet ignoring return value (see below).
       blinkbios_irdata_send_packet(f, ir_send_packet_buffer, outgoingPacketLen);
