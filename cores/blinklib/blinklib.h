@@ -266,8 +266,6 @@ void setFaceColor(  byte face, Color newColor );
 // 4) overflows after about 50 days
 // 5) is only accurate to about +/-10%
 
-unsigned long millis(void);
-
 class Timer {
 
 	private:
