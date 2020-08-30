@@ -39,6 +39,7 @@
 // The actual memory for these blocks is allocated in main.cpp. Remember, it
 // overlaps with the same blocks in BlinkBIOS code running in the bootloader!
 
+#include "blinklib_common.h"
 #include "blinklib_time_internal.h"
 #include "shared/blinkbios_shared_button.h"
 #include "shared/blinkbios_shared_functions.h"  // Gets us ir_send_packet()

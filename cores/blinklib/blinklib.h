@@ -24,11 +24,8 @@
 #include <limits.h>  // UINTLONG_MAX for NEVER
 
 #include "ArduinoTypes.h"
+#include "blinklib_common.h"
 #include "blinklib_time.h"
-
-// Number of faces on a blink. Looks nicer than hardcoding '6' everywhere.
-
-#define FACE_COUNT 6
 
 /*
 
@@ -394,22 +391,5 @@ void setup(void);
 // on the tile face are updated
 
 void loop();
-
-
-/*
-
-	Some syntactic sugar to make our programs look not so ugly.
-
-*/
-
-
-
-// 'Cause C ain't got no iterators and all those FOR loops are too ugly.
-// TODO: Yuck, gcc expands this loop index to a word, which costs a load, a compare, and a multiply. :/
-#define FOREACH_FACE(x) for(uint8_t x = 0; x < FACE_COUNT ; ++ x)       // Pretend this is a real language with iterators
-
-// Get the number of elements in an array.
-#define COUNT_OF(x) ((sizeof(x)/sizeof(x[0])))
-
 
 #endif /* BLINKLIB_H_ */
