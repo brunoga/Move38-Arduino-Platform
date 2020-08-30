@@ -7,8 +7,8 @@
 // 'Cause C ain't got no iterators and all those FOR loops are too ugly.
 // TODO: Yuck, gcc expands this loop index to a word, which costs a load, a
 // compare, and a multiply. :/
-#define FOREACH_FACE(x)               \
-  for (uint8_t x = 0; x < FACE_COUNT; \
+#define FOREACH_FACE(x)            \
+  for (byte x = 0; x < FACE_COUNT; \
        ++x)  // Pretend this is a real language with iterators
 
 // Get the number of elements in an array.

@@ -548,15 +548,14 @@ static void RX_IRFaces() {
       // No matter what, mark buffer as read so we can get next packet
       ir_rx_state->packetBufferReady = 0;
     } else if (blinkbios_is_rx_in_progress(f)) {
-      // We did not receive any data this iteration but we just noticed there is
-      // a transfer in progress, so we extend our deadline as eventually it wil
-      // complete and we will receive the packet and then send ours.
+      // We did not receive any data this iteration but we just noticed there
+      // is a transfer in progress, so we extend our deadline as eventually it
+      // will complete and we will receive the packet and then send ours. Note
+      // that this might be a spurious transfer that will be aborted by
+      // BlinkBIOS so double check if it is a good idea doing this.
+      // TODO(bga): Check.
       face->sendTime = blinklib::time::internal::now + TX_PROBE_TIME_MS;
-
-      // We can also extend our face expiration for the same reason as above. We
-      // know there is someoen out there.
-      face->expireTime = blinklib::time::internal::now + RX_EXPIRE_TIME_MS;
-    }  // if ( ir_data_buffer->ready_flag )
+    }
 
     face++;
     ir_rx_state++;
