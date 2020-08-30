@@ -39,7 +39,7 @@
 // The actual memory for these blocks is allocated in main.cpp. Remember, it
 // overlaps with the same blocks in BlinkBIOS code running in the bootloader!
 
-#include "blinklib_time.h"
+#include "blinklib_time_internal.h"
 #include "shared/blinkbios_shared_button.h"
 #include "shared/blinkbios_shared_functions.h"  // Gets us ir_send_packet()
 #include "shared/blinkbios_shared_irdata.h"
@@ -137,8 +137,6 @@ uint8_t viralButtonPressSendOnFaceBitflags;  // A 1 here means send the viral
 Timer viralButtonPressLockoutTimer;  // Set each time we send a viral button
                                      // press to avoid sending getting into a
                                      // circular loop
-
-unsigned long millis() { return blinklib::time::now; }
 
 // Returns a 8-bit inverted checksum of all bytes
 
@@ -469,7 +467,7 @@ static void RX_IRFaces() {
     if (ir_rx_state->packetBufferReady) {
       // Got something, so we know there is someone out there
       // TODO: Should we require the received packet to pass error checks?
-      face->expireTime = blinklib::time::now + RX_EXPIRE_TIME_MS;
+      face->expireTime = blinklib::time::internal::now + RX_EXPIRE_TIME_MS;
 
       // This is slightly ugly. To save a buffer, we get the full packet with
       // the BlinkBIOS IR packet type byte.
@@ -552,11 +550,11 @@ static void RX_IRFaces() {
       // We did not receive any data this iteration but we just noticed there is
       // a transfer in progress, so we extend our deadline as eventually it wil
       // complete and we will receive the packet and then send ours.
-      face->sendTime = blinklib::time::now + TX_PROBE_TIME_MS;
+      face->sendTime = blinklib::time::internal::now + TX_PROBE_TIME_MS;
 
       // We can also extend our face expiration for the same reason as above. We
       // know there is someoen out there.
-      face->expireTime = blinklib::time::now + RX_EXPIRE_TIME_MS;
+      face->expireTime = blinklib::time::internal::now + RX_EXPIRE_TIME_MS;
     }  // if ( ir_data_buffer->ready_flag )
 
     face++;
@@ -580,7 +578,8 @@ static void TX_IRFaces() {
   for (byte f = 0; f < FACE_COUNT; f++) {
     // Send one out too if it is time....
 
-    if (face->sendTime <= blinklib::time::now) {  // Time to send on this face?
+    if (face->sendTime <=
+        blinklib::time::internal::now) {  // Time to send on this face?
       // Note that we do not use the rx_fresh flag here because we want the
       // timeout to do automatic retries to kickstart things when a new
       // neighbor shows up or when an IR message gets missed
@@ -621,7 +620,8 @@ static void TX_IRFaces() {
       // Note we are using the "real" time here to offset the actual time it
       // takes to send the datagram (16 byte datagrams take up to 65 ms to
       // transmit currently).
-      face->sendTime = blinklib::time::currentMillis() + TX_PROBE_TIME_MS;
+      face->sendTime =
+          blinklib::time::internal::currentMillis() + TX_PROBE_TIME_MS;
     }  // if ( face->sendTime <= now )
 
     face++;
@@ -656,7 +656,7 @@ bool didValueOnFaceChange(byte face) {
 }
 
 bool isValueReceivedOnFaceExpired(byte face) {
-  return faces[face].expireTime < blinklib::time::now;
+  return faces[face].expireTime < blinklib::time::internal::now;
 }
 
 // Returns false if their has been a neighbor seen recently on any face, true
@@ -1135,10 +1135,10 @@ void __attribute__((noreturn)) run(void) {
   blinkbios_button_block.wokeFlag =
       1;  // Clear any old wakes (wokeFlag is cleared to 0 on wake)
 
-  blinklib::time::updateNow();  // Initialize out internal millis so that when
-                                // we reset the warm sleep counter it is
-                                // right, and so setup sees the right millis
-                                // time
+  blinklib::time::internal::updateNow();  // Initialize out internal millis so
+                                          // that when we reset the warm sleep
+                                          // counter it is right, and so setup
+                                          // sees the right millis time
   reset_warm_sleep_timer();
 
   statckwatcher_init();  // Set up the sentinel byte at the top of RAM used by
@@ -1216,7 +1216,7 @@ void __attribute__((noreturn)) run(void) {
     // Used by millis() and Timer thus functions
     // This comes after the possible button holding to enter seed mode
 
-    blinklib::time::updateNow();
+    blinklib::time::internal::updateNow();
 
     if (blinkbios_button_block.bitflags &
         BUTTON_BITFLAG_PRESSED) {  // Any button press resets the warm sleep

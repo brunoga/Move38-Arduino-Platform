@@ -1,7 +1,6 @@
 #include <limits.h>  // Get ULONG_MAX for NEVER
 
 #include "blinklib.h"
-#include "blinklib_time.h"
 
 // Note we directly access millis() here, which is really bad style.
 // The timer should capture millis() in a closure, but no good way to
@@ -13,18 +12,18 @@
 // Here we leave the constructor empty and depend in the BBS section clearing
 // to set it to 0 (the constructor mechanism uses lots of flash).
 
-bool Timer::isExpired() { return blinklib::time::millis() > m_expireTime; }
+bool Timer::isExpired() { return millis() > m_expireTime; }
 
-void Timer::set(uint32_t ms) { m_expireTime = blinklib::time::millis() + ms; }
+void Timer::set(uint32_t ms) { m_expireTime = millis() + ms; }
 
 uint32_t Timer::getRemaining() {
   uint32_t timeRemaining;
 
-  if (blinklib::time::millis() >= m_expireTime) {
+  if (millis() >= m_expireTime) {
     timeRemaining = 0;
 
   } else {
-    timeRemaining = m_expireTime - blinklib::time::millis();
+    timeRemaining = m_expireTime - millis();
   }
 
   return timeRemaining;

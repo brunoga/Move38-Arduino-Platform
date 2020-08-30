@@ -21,8 +21,10 @@
 // Define this so programs can require this specific version.
 #define BGA_CUSTOM_BLINKLIB
 
-#include <limits.h>         // UINTLONG_MAX for NEVER
+#include <limits.h>  // UINTLONG_MAX for NEVER
+
 #include "ArduinoTypes.h"
+#include "blinklib_time.h"
 
 // Number of faces on a blink. Looks nicer than hardcoding '6' everywhere.
 

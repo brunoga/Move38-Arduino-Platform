@@ -2,16 +2,18 @@
 
 #include <avr/interrupt.h>
 
+#include "blinklib_time_internal.h"
+
 namespace blinklib {
 
 namespace time {
+
+namespace internal {
 
 // Millis snapshot for this pass though loop
 millis_t now;
 
 void updateNow() { now = currentMillis(); }
-
-millis_t millis() { return now; }
 
 // Capture time snapshot
 // It is 4 bytes long so we cli() so it can not get updated in the middle of
@@ -24,6 +26,10 @@ millis_t currentMillis() {
   return currentNow;
 }
 
+}  // namespace internal
+
 }  // namespace time
 
 }  // namespace blinklib
+
+millis_t millis() { return blinklib::time::internal::now; }
