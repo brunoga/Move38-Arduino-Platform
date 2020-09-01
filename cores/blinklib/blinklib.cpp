@@ -132,11 +132,6 @@ struct face_t {
 
 static face_t faces[FACE_COUNT];
 
-uint8_t viralButtonPressSendOnFaceBitflags;  // A 1 here means send the viral
-                                             // button press bit on the next IR
-                                             // packet on this face. Cleared
-                                             // when it gets sent.
-
 Timer viralButtonPressLockoutTimer;  // Set each time we send a viral button
                                      // press to avoid sending getting into a
                                      // circular loop
@@ -170,10 +165,6 @@ byte blinkbios_irdata_send_packet(byte face, const byte *data, byte len) {
   // by the linker to a direct call to the target address.
   return BLINKBIOS_IRDATA_SEND_PACKET_VECTOR(face, data, len);
 }
-
-#define SBI(x, b) (x |= (1 << b))   // Set bit
-#define CBI(x, b) (x &= ~(1 << b))  // Clear bit
-#define TBI(x, b) (x & (1 << b))    // Test bit
 
 bool sendDatagramOnFace(const void *data, byte len, byte face) {
   if (len > IR_DATAGRAM_LEN) return false;
@@ -444,7 +435,13 @@ void viralPostponeWarmSleep() {
   if (viralButtonPressLockoutTimer.isExpired()) {
     viralButtonPressLockoutTimer.set(VIRAL_BUTTON_PRESS_LOCKOUT_MS);
 
-    viralButtonPressSendOnFaceBitflags = IR_FACE_BITMASK;
+    face_t *face = faces;
+
+    FOREACH_FACE(f) {
+      face->header.postpone_sleep = true;
+
+      face++;
+    }
 
     // Prevent warm sleep
     reset_warm_sleep_timer();
@@ -569,10 +566,6 @@ static void TX_IRFaces() {
       // timeout to do automatic retries to kickstart things when a new
       // neighbor shows up or when an IR message gets missed
 
-      // Encode the checksum byte with the viral button flag in the header
-      face->header.postpone_sleep = TBI(viralButtonPressSendOnFaceBitflags, f);
-      CBI(viralButtonPressSendOnFaceBitflags, f);
-
       face->header.non_special = true;
 
       // Total length of the outgoing packet in ir_send_packet_buffer. Face
@@ -586,10 +579,11 @@ static void TX_IRFaces() {
 
       // Ok, it is time to send something on this face.
 
-      // Send packet ignoring return value (see below).
+      // Send packet.
       if (blinkbios_irdata_send_packet(f, (const byte *)&face->outValue,
                                        outgoingPacketLen)) {
         face->send_header = false;
+        face->header.postpone_sleep = false;
       }
 
       // If the above returns 0, then we could not send because there was an RX
@@ -1193,10 +1187,6 @@ void __attribute__((noreturn)) run(void) {
 
         __builtin_unreachable();
       }
-    }
-
-    if ((blinkbios_button_block.bitflags & BUTTON_BITFLAG_6SECPRESSED)) {
-      warm_sleep_cycle();
     }
 
     // Capture time snapshot
