@@ -435,13 +435,7 @@ void viralPostponeWarmSleep() {
   if (viralButtonPressLockoutTimer.isExpired()) {
     viralButtonPressLockoutTimer.set(VIRAL_BUTTON_PRESS_LOCKOUT_MS);
 
-    face_t *face = faces;
-
-    FOREACH_FACE(f) {
-      face->header.postpone_sleep = true;
-
-      face++;
-    }
+    FOREACH_FACE(f) { faces[f].header.postpone_sleep = true; }
 
     // Prevent warm sleep
     reset_warm_sleep_timer();
