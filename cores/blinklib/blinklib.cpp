@@ -371,8 +371,8 @@ static void warm_sleep_cycle() {
 
     FOREACH_FACE(f) {
       if (ir_rx_state->packetBufferReady) {
-        if (ir_rx_state->packetBuffer[1] != TRIGGER_WARM_SLEEP_SPECIAL_VALUE ||
-            ir_rx_state->packetBuffer[2] != TRIGGER_WARM_SLEEP_SPECIAL_VALUE) {
+        if (ir_rx_state->packetBuffer[1] == NOP_SPECIAL_VALUE &&
+            ir_rx_state->packetBuffer[2] == NOP_SPECIAL_VALUE) {
           saw_packet_flag = 1;
         }
 
@@ -524,14 +524,6 @@ static void RX_IRFaces() {
           }
         }
       }
-    } else if (blinkbios_is_rx_in_progress(f)) {
-      // We did not receive any data this iteration but we just noticed there
-      // is a transfer in progress, so we extend our deadline as eventually it
-      // will complete and we will receive the packet and then send ours. Note
-      // that this might be a spurious transfer that will be aborted by
-      // BlinkBIOS so double check if it is a good idea doing this.
-      // TODO(bga): Check.
-      face->sendTime = blinklib::time::internal::now + TX_PROBE_TIME_MS;
     }
 
     // No matter what, mark buffer as read so we can get next packet
@@ -1181,6 +1173,10 @@ void __attribute__((noreturn)) run(void) {
 
         __builtin_unreachable();
       }
+    }
+
+    if ((blinkbios_button_block.bitflags & BUTTON_BITFLAG_6SECPRESSED)) {
+      warm_sleep_cycle();
     }
 
     // Capture time snapshot
