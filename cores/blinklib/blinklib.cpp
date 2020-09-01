@@ -456,7 +456,7 @@ static void RX_IRFaces() {
   face_t *face = faces;
   volatile ir_rx_state_t *ir_rx_state = blinkbios_irdata_block.ir_rx_states;
 
-  for (byte f = 0; f < FACE_COUNT; f++) {
+  FOREACH_FACE(f) {
     // Check for anything new coming in...
 
     if (ir_rx_state->packetBufferReady) {
@@ -560,7 +560,7 @@ static void TX_IRFaces() {
   //  Use these pointers to step though the arrays
   face_t *face = faces;
 
-  for (byte f = 0; f < FACE_COUNT; f++) {
+  FOREACH_FACE(f) {
     // Send one out too if it is time....
 
     if (face->sendTime <=
