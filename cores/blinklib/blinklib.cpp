@@ -461,7 +461,8 @@ static void warm_sleep_cycle() {
 
             if (ir_rx_state->packetBufferReady) {
 
-                if (ir_rx_state->packetBuffer[1] != TRIGGER_WARM_SLEEP_SPECIAL_VALUE ) {
+                if (ir_rx_state->packetBuffer[1] != TRIGGER_WARM_SLEEP_SPECIAL_VALUE 
+			|| ir_rx_state->packetBuffer[2] != TRIGGER_WARM_SLEEP_SPECIAL_VALUE) {
 
                     saw_packet_flag =1;
 
