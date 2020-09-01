@@ -102,8 +102,8 @@ union header_t {
   struct {
     byte sequence : 3;
     byte ack_sequence : 3;
-    bool unused : 1;
     bool postpone_sleep : 1;
+    bool non_special : 1;
   };
 
   byte as_byte;
@@ -126,6 +126,8 @@ struct face_t {
   millis_t
       sendTime;  // Next time we will transmit on this face (set to 0 every time
                  // we get a good message so we ping-pong across the link)
+
+  bool send_header;
 };
 
 static face_t faces[FACE_COUNT];
@@ -140,16 +142,6 @@ Timer viralButtonPressLockoutTimer;  // Set each time we send a viral button
                                      // circular loop
 
 // Returns a 8-bit inverted checksum of all bytes
-
-byte computePacketChecksum(volatile const byte *buffer, byte len) {
-  byte computedChecksum = 0;
-
-  for (byte l = 0; l < len; l++) {
-    computedChecksum += buffer[l];
-  }
-
-  return computedChecksum ^ 0b11111111;
-}
 
 #if ((IR_LONG_PACKET_MAX_LEN + 3) > IR_RX_PACKET_SIZE)
 
@@ -274,11 +266,12 @@ void restorePixels() {
 // special cookie value Because it must be 2 long, this means that the cookie
 // can still be a data value since that value would only have a 1 byte packet
 
-static uint8_t force_sleep_packet = TRIGGER_WARM_SLEEP_SPECIAL_VALUE;
+static uint8_t force_sleep_packet[2] = {TRIGGER_WARM_SLEEP_SPECIAL_VALUE,
+                                        TRIGGER_WARM_SLEEP_SPECIAL_VALUE};
 
 // This packet does nothing except wake up our neighbors
 
-static uint8_t nop_wake_packet = NOP_SPECIAL_VALUE;
+static uint8_t nop_wake_packet[2] = {NOP_SPECIAL_VALUE, NOP_SPECIAL_VALUE};
 
 #define SLEEP_PACKET_REPEAT_COUNT \
   5  // How many times do we send the sleep and wake packets for redunancy?
@@ -327,7 +320,7 @@ static void warm_sleep_cycle() {
       // while ( blinkbios_is_rx_in_progress( f ) );     // Wait to clear to
       // send (no guarantee, but better than just blink sending)
 
-      blinkbios_irdata_send_packet(f, &force_sleep_packet, 1);
+      blinkbios_irdata_send_packet(f, force_sleep_packet, 2);
     }
   }
 
@@ -387,7 +380,8 @@ static void warm_sleep_cycle() {
 
     FOREACH_FACE(f) {
       if (ir_rx_state->packetBufferReady) {
-        if (ir_rx_state->packetBuffer[1] != TRIGGER_WARM_SLEEP_SPECIAL_VALUE) {
+        if (ir_rx_state->packetBuffer[1] != TRIGGER_WARM_SLEEP_SPECIAL_VALUE ||
+            ir_rx_state->packetBuffer[2] != TRIGGER_WARM_SLEEP_SPECIAL_VALUE) {
           saw_packet_flag = 1;
         }
 
@@ -433,7 +427,7 @@ static void warm_sleep_cycle() {
       fade_brightness += animation_fade_step;
       setColorNow(dim(WHITE, fade_brightness));
 
-      blinkbios_irdata_send_packet(f, &nop_wake_packet, 1);
+      blinkbios_irdata_send_packet(f, nop_wake_packet, 2);
     }
   }
 
@@ -483,24 +477,20 @@ static void RX_IRFaces() {
         uint8_t packetDataLen = (ir_rx_state->packetBufferLen) -
                                 1;  // deduct the BlinkBIOS packet type  byte
 
+        // Clear to send on this face immediately to ping-pong
+        // messages at max speed without collisions
+        face->sendTime = 0;
+
+        // Save face value.
+        face->inValue = packetData[0];
+
         if (packetDataLen > 1) {
-          // Validate checksum.
-          byte checksum = packetData[packetDataLen - 1];
+          // Guaranteed delivery: Parse incoming header.
+          header_t incoming_header;
+          incoming_header.as_byte = packetData[1];
 
-          if (computePacketChecksum(packetData, packetDataLen - 1) ==
-              checksum) {
-            // If we get here, then we know this is a valid packet
-
-            // Clear to send on this face immediately to ping-pong
-            // messages at max speed without collisions
-            face->sendTime = 0;
-
-            // Save face value.
-            face->inValue = packetData[0];
-
-            // Guaranteed delivery: Parse incoming header.
-            header_t incoming_header;
-            incoming_header.as_byte = packetData[1];
+          if (incoming_header.non_special) {
+            // Normal datagram.
 
             if (incoming_header.postpone_sleep) {
               // The blink on on the other side of this connection
@@ -520,33 +510,29 @@ static void RX_IRFaces() {
               face->outDatagramLen = 0;
             }
 
-            if (packetDataLen > 3) {
+            if (packetDataLen > 2) {
               // We also received a datagram to process.
               if (incoming_header.sequence != face->header.ack_sequence) {
-                // Looks like a new one. Record it and start sendingf acks for
+                // Looks like a new one. Record it and start sending acks for
                 // it.
                 face->header.ack_sequence = incoming_header.sequence;
-                face->inDatagramLen = packetDataLen - 3;
+                face->inDatagramLen = packetDataLen - 2;
                 memcpy(&face->inDatagramData, (const void *)&packetData[2],
                        face->inDatagramLen);
               } else {
                 // Resend. Just ignore it and continue sending ack.
+                face->send_header = true;
               }
             }
-          }
-        } else {  // packetDataLen == 1
-          // Here is look for a magic packet that has 1 bytes
-          // of data and it is the special sleep trigger
-          // cookie.
-
-          if (packetData[0] == TRIGGER_WARM_SLEEP_SPECIAL_VALUE) {
-            warm_sleep_cycle();
+          } else {
+            // Special packet.
+            if (packetData[0] == TRIGGER_WARM_SLEEP_SPECIAL_VALUE &&
+                packetData[1] == TRIGGER_WARM_SLEEP_SPECIAL_VALUE) {
+              warm_sleep_cycle();
+            }
           }
         }
       }
-
-      // No matter what, mark buffer as read so we can get next packet
-      ir_rx_state->packetBufferReady = 0;
     } else if (blinkbios_is_rx_in_progress(f)) {
       // We did not receive any data this iteration but we just noticed there
       // is a transfer in progress, so we extend our deadline as eventually it
@@ -557,19 +543,18 @@ static void RX_IRFaces() {
       face->sendTime = blinklib::time::internal::now + TX_PROBE_TIME_MS;
     }
 
+    // No matter what, mark buffer as read so we can get next packet
+    ir_rx_state->packetBufferReady = 0;
+
+    // Increment our pointers.
     face++;
     ir_rx_state++;
-
-  }  // for( uint8_t f=0; f < FACE_COUNT ; f++ )
+  }
 }
 
 // Buffer to build each outgoing IR packet
 // This is the easy way to do this, but uses RAM unnecessarily.
 // TODO: Make a scatter version of this to save RAM & time
-
-static byte
-    ir_send_packet_buffer[IR_DATAGRAM_LEN + 2];  // header byte + Datagram
-                                                 // payload  + checksum byte
 
 static void TX_IRFaces() {
   //  Use these pointers to step though the arrays
@@ -584,24 +569,28 @@ static void TX_IRFaces() {
       // timeout to do automatic retries to kickstart things when a new
       // neighbor shows up or when an IR message gets missed
 
-      // Total length of the outgoing packet in ir_send_packet_buffer. Face
-      // value + header + datagram + checksum.
-      byte outgoingPacketLen = 3 + face->outDatagramLen;
-
-      // Ok, it is time to send something on this face.
-
       // Encode the checksum byte with the viral button flag in the header
       face->header.postpone_sleep = TBI(viralButtonPressSendOnFaceBitflags, f);
       CBI(viralButtonPressSendOnFaceBitflags, f);
 
-      memcpy(ir_send_packet_buffer, &face->outValue, outgoingPacketLen - 1);
+      face->header.non_special = true;
 
-      // Compute and set checksum.
-      ir_send_packet_buffer[outgoingPacketLen - 1] =
-          computePacketChecksum(ir_send_packet_buffer, outgoingPacketLen - 1);
+      // Total length of the outgoing packet in ir_send_packet_buffer. Face
+      // value + header + datagram + checksum.
+      byte outgoingPacketLen = 1;
+      if (face->send_header || face->outDatagramLen > 0 ||
+          face->header.postpone_sleep) {
+        outgoingPacketLen++;
+      }
+      outgoingPacketLen += face->outDatagramLen;
+
+      // Ok, it is time to send something on this face.
 
       // Send packet ignoring return value (see below).
-      blinkbios_irdata_send_packet(f, ir_send_packet_buffer, outgoingPacketLen);
+      if (blinkbios_irdata_send_packet(f, (const byte *)&face->outValue,
+                                       outgoingPacketLen)) {
+        face->send_header = false;
+      }
 
       // If the above returns 0, then we could not send because there was an RX
       // in progress on this face. In this case we will send this packet again
@@ -622,11 +611,9 @@ static void TX_IRFaces() {
       // transmit currently).
       face->sendTime =
           blinklib::time::internal::currentMillis() + TX_PROBE_TIME_MS;
-    }  // if ( face->sendTime <= now )
-
+    }
     face++;
-
-  }  // for( uint8_t f=0; f < FACE_COUNT ; f++ )
+  }
 }
 
 // Returns the last received state on the indicated face
