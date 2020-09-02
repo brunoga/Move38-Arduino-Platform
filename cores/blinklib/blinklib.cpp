@@ -236,18 +236,14 @@ pixelColor_t savedPixelBuffer[PIXEL_COUNT];
 
 void savePixels() {
   // Save game pixels
-
-  FOREACH_FACE(f) {
-    savedPixelBuffer[f] = blinkbios_pixel_block.pixelBuffer[f];
-  }
+  memcpy(savedPixelBuffer, blinkbios_pixel_block.pixelBuffer,
+         PIXEL_COUNT * sizeof(pixelColor_t));
 }
 
 void restorePixels() {
-  // Save game pixels
-
-  FOREACH_FACE(f) {
-    blinkbios_pixel_block.pixelBuffer[f] = savedPixelBuffer[f];
-  }
+  // Restore game pixels
+  memcpy(blinkbios_pixel_block.pixelBuffer, savedPixelBuffer,
+         PIXEL_COUNT * sizeof(pixelColor_t));
 }
 
 #define SLEEP_ANIMATION_DURATION_MS 300
