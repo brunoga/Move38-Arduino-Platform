@@ -1,6 +1,8 @@
+#include "blinklib_timer.h"
+
 #include <limits.h>  // Get ULONG_MAX for NEVER
 
-#include "blinklib.h"
+#include "blinklib_time.h"
 
 // Note we directly access millis() here, which is really bad style.
 // The timer should capture millis() in a closure, but no good way to
