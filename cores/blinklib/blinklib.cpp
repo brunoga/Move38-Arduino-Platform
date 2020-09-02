@@ -552,12 +552,9 @@ static void TX_IRFaces() {
 
       // Total length of the outgoing packet in ir_send_packet_buffer. Face
       // value + header + datagram + checksum.
-      byte outgoingPacketLen = 1;
-      if (face->send_header || face->outDatagramLen > 0 ||
-          face->header.postpone_sleep) {
-        outgoingPacketLen++;
-      }
-      outgoingPacketLen += face->outDatagramLen;
+      byte outgoingPacketLen =
+          1 + (face->send_header | face->header.postpone_sleep) +
+          face->outDatagramLen;
 
       // Ok, it is time to send something on this face.
 
