@@ -160,7 +160,8 @@ void markDatagramReadOnFace(byte face) { faces[face].inDatagramLen = 0; }
 
 // Jump to the send packet function all way up in the bootloader
 
-byte blinkbios_irdata_send_packet(byte face, const byte *data, byte len) {
+byte __attribute__((noinline))
+blinkbios_irdata_send_packet(byte face, const byte *data, byte len) {
   // Call directly into the function in the bootloader. This symbol is resolved
   // by the linker to a direct call to the target address.
   return BLINKBIOS_IRDATA_SEND_PACKET_VECTOR(face, data, len);
@@ -182,7 +183,7 @@ bool sendDatagramOnFace(const void *data, byte len, byte face) {
   return true;
 }
 
-static void clear_packet_buffers() {
+static void __attribute__((noinline)) clear_packet_buffers() {
   FOREACH_FACE(f) {
     blinkbios_irdata_block.ir_rx_states[f].packetBufferReady = 0;
   }
