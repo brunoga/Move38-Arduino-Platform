@@ -18,7 +18,7 @@ void updateNow() { now = currentMillis(); }
 // Capture time snapshot
 // It is 4 bytes long so we cli() so it can not get updated in the middle of
 // us grabbing it
-millis_t currentMillis() {
+millis_t __attribute__((noinline)) currentMillis() {
   cli();
   millis_t currentNow = blinkbios_millis_block.millis;
   sei();

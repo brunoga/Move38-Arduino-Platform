@@ -14,11 +14,15 @@
 // Here we leave the constructor empty and depend in the BBS section clearing
 // to set it to 0 (the constructor mechanism uses lots of flash).
 
-bool Timer::isExpired() { return millis() > m_expireTime; }
+bool __attribute__((noinline)) Timer::isExpired() {
+  return millis() > m_expireTime;
+}
 
-void Timer::set(uint32_t ms) { m_expireTime = millis() + ms; }
+void __attribute__((noinline)) Timer::set(uint32_t ms) {
+  m_expireTime = millis() + ms;
+}
 
-uint32_t Timer::getRemaining() {
+uint32_t __attribute__((noinline)) Timer::getRemaining() {
   uint32_t timeRemaining;
 
   if (millis() >= m_expireTime) {
@@ -44,4 +48,4 @@ void Timer::add(uint16_t ms) {
   }
 }
 
-void Timer::never(void) { m_expireTime = NEVER; }
+void __attribute__((noinline)) Timer::never(void) { m_expireTime = NEVER; }

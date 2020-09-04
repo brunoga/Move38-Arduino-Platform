@@ -191,7 +191,7 @@ static void clear_packet_buffers() {
 // Set the color and display it immediately
 // for internal use where we do not want the loop buffering
 
-static void setColorNow(Color newColor) {
+static void __attribute__((noinline)) setColorNow(Color newColor) {
   setColor(newColor);
   BLINKBIOS_DISPLAY_PIXEL_BUFFER_VECTOR();
 }
