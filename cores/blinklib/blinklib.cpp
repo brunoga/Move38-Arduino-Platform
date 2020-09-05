@@ -39,7 +39,7 @@
 // The actual memory for these blocks is allocated in main.cpp. Remember, it
 // overlaps with the same blocks in BlinkBIOS code running in the bootloader!
 
-#include "blinklib_common.h"
+#include "blinklib_led_internal.h"
 #include "blinklib_time_internal.h"
 #include "shared/blinkbios_shared_button.h"
 #include "shared/blinkbios_shared_functions.h"  // Gets us ir_send_packet()
@@ -229,24 +229,6 @@ void reset_warm_sleep_timer() { warm_sleep_time.set(WARM_SLEEP_TIMEOUT_MS); }
 
 uint8_t hasWarmWokenFlag = 0;
 
-// We need to save the pixel buffer when we warm sleep so we display our
-// sleep and wake animations and then restore the original game pixels before
-// restarting the game
-
-pixelColor_t savedPixelBuffer[PIXEL_COUNT];
-
-void savePixels() {
-  // Save game pixels
-  memcpy(savedPixelBuffer, blinkbios_pixel_block.pixelBuffer,
-         PIXEL_COUNT * sizeof(pixelColor_t));
-}
-
-void restorePixels() {
-  // Restore game pixels
-  memcpy(blinkbios_pixel_block.pixelBuffer, savedPixelBuffer,
-         PIXEL_COUNT * sizeof(pixelColor_t));
-}
-
 #define SLEEP_ANIMATION_DURATION_MS 300
 #define SLEEP_ANIMATION_MAX_BRIGHTNESS 200
 
@@ -274,7 +256,7 @@ static void warm_sleep_cycle() {
   // we need to do this because the sleep and wake animations
   // will overwrite whatever is there.
 
-  savePixels();
+  blinklib::led::internal::SaveState();
 
   // Ok, now we are virally sending FORCE_SLEEP out on all faces to spread the
   // word and the pixels are off so the user is happy and we are saving power.
@@ -421,7 +403,7 @@ static void warm_sleep_cycle() {
 
   // restore game pixels
 
-  restorePixels();
+  blinklib::led::internal::RestoreState();
 }
 
 // Called anytime a the button is pressed or anytime we get a viral button press
@@ -1132,7 +1114,7 @@ void __attribute__((noreturn)) run(void) {
       // mess them up and we will need to get them back if the user continues
       // to hold past the seed phase and into the warm sleep phase.
 
-      savePixels();
+      blinklib::led::internal::SaveState();
 
       // Now wait until either the button is lifted or is held down past 7
       // second mark so we know what to do
@@ -1150,7 +1132,7 @@ void __attribute__((noreturn)) run(void) {
         BLINKBIOS_DISPLAY_PIXEL_BUFFER_VECTOR();
       }
 
-      restorePixels();
+      blinklib::led::internal::RestoreState();
 
       if (blinkbios_button_block.bitflags & BUTTON_BITFLAG_6SECPRESSED) {
         // Held down past the 7 second mark, so this is a force sleep request
