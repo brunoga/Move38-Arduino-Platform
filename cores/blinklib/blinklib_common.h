@@ -1,6 +1,10 @@
 #ifndef BLINKLIB_COMMON_H_
 #define BLINKLIB_COMMON_H_
 
+#include <stdint.h>
+
+typedef uint8_t byte;
+
 // Number of faces on a blink. Looks nicer than hardcoding '6' everywhere.
 #define FACE_COUNT 6
 
