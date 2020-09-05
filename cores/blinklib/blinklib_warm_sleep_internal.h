@@ -2,6 +2,7 @@
 #define BLINKLIB_WARM_SLEEP_INTERNAL_H_
 
 #include "blinklib_common.h"
+#include "blinklib_timer.h"
 
 // This is a special byte that triggers a warm sleep cycle when received
 // It must appear in the first & second byte of data

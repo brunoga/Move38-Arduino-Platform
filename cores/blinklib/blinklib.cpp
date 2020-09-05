@@ -39,6 +39,7 @@
 // The actual memory for these blocks is allocated in main.cpp. Remember, it
 // overlaps with the same blocks in BlinkBIOS code running in the bootloader!
 
+#include "blinklib_ir_internal.h"
 #include "blinklib_led_internal.h"
 #include "blinklib_time_internal.h"
 #include "blinklib_warm_sleep_internal.h"
@@ -46,114 +47,6 @@
 #include "shared/blinkbios_shared_functions.h"  // Gets us ir_send_packet()
 #include "shared/blinkbios_shared_irdata.h"
 #include "shared/blinkbios_shared_pixel.h"
-
-#define TX_PROBE_TIME_MS \
-  150  // How often to do a blind send when no RX has happened recently to
-       // trigger ping pong Nice to have probe time shorter than expire time so
-       // you have to miss 2 messages before the face will expire
-
-#define RX_EXPIRE_TIME_MS \
-  200  // If we do not see a message in this long, then show that face as
-       // expired
-
-#define VIRAL_BUTTON_PRESS_LOCKOUT_MS \
-  2000  // Any viral button presses received from IR within this time period are
-        // ignored since insures that a single press can not circulate around
-        // indefinitely.
-
-#if IR_DATAGRAM_LEN > IR_RX_PACKET_SIZE
-#error IR_DATAGRAM_LEN must not be bigger than IR_RX_PACKET_SIZE
-#endif
-
-// All semantics chosen to have sane startup 0 so we can
-// keep this in bss section and have it zeroed out at startup.
-
-// Guaranteed delivery: Keeps track of the current datagram sequence and the
-// sequence we are sending acks to.
-union header_t {
-  struct {
-    byte sequence : 3;
-    byte ack_sequence : 3;
-    bool postpone_sleep : 1;
-    bool non_special : 1;
-  };
-
-  byte as_byte;
-};
-
-struct face_t {
-  byte inValue;  // Last received value on this face, or 0 if no neighbor
-                 // ever seen since startup
-  byte inDatagramData[IR_DATAGRAM_LEN];
-  byte inDatagramLen;  // 0= No datagram waiting to be read
-
-  millis_t expireTime;  // When this face will be considered to be expired (no
-                        // neighbor there)
-
-  byte outValue;  // Value we send out on this face
-  header_t header;
-  byte outDatagramData[IR_DATAGRAM_LEN];
-  byte outDatagramLen;  // 0= No datagram waiting to be sent
-
-  millis_t
-      sendTime;  // Next time we will transmit on this face (set to 0 every time
-                 // we get a good message so we ping-pong across the link)
-
-  bool send_header;
-};
-
-static face_t faces[FACE_COUNT];
-
-Timer viralButtonPressLockoutTimer;  // Set each time we send a viral button
-                                     // press to avoid sending getting into a
-                                     // circular loop
-
-// Returns a 8-bit inverted checksum of all bytes
-
-#if ((IR_LONG_PACKET_MAX_LEN + 3) > IR_RX_PACKET_SIZE)
-
-#error There has to be enough room in the blinkos packet buffer to hold the user packet plus 2 header bytes and one checksum byte
-
-#endif
-
-byte getDatagramLengthOnFace(byte face) { return faces[face].inDatagramLen; }
-
-bool isDatagramReadyOnFace(byte face) {
-  return getDatagramLengthOnFace(face) != 0;
-}
-
-bool isDatagramPendingOnFace(byte face) {
-  return faces[face].outDatagramLen != 0;
-}
-
-const byte *getDatagramOnFace(byte face) { return faces[face].inDatagramData; }
-
-void markDatagramReadOnFace(byte face) { faces[face].inDatagramLen = 0; }
-
-// Jump to the send packet function all way up in the bootloader
-
-byte __attribute__((noinline))
-blinkbios_irdata_send_packet(byte face, const byte *data, byte len) {
-  // Call directly into the function in the bootloader. This symbol is resolved
-  // by the linker to a direct call to the target address.
-  return BLINKBIOS_IRDATA_SEND_PACKET_VECTOR(face, data, len);
-}
-
-bool sendDatagramOnFace(const void *data, byte len, byte face) {
-  if (len > IR_DATAGRAM_LEN) return false;
-
-  face_t *f = &faces[face];
-
-  if (f->outDatagramLen != 0) return false;
-
-  // Guaranteed delivery: Increment sequence number.
-  f->header.sequence = (f->header.sequence % 15) + 1;
-
-  f->outDatagramLen = len;
-  memcpy(f->outDatagramData, data, len);
-
-  return true;
-}
 
 Color lighten(Color color, byte brightness) {
   return MAKECOLOR_5BIT_RGB(
@@ -167,233 +60,6 @@ Color lighten(Color color, byte brightness) {
        (((MAX_BRIGHTNESS_5BIT - (GET_5BIT_B(color))) * brightness) /
         MAX_BRIGHTNESS)));
 }
-
-// Called anytime a the button is pressed or anytime we get a viral button press
-// form a neighbor over IR Note that we know that this can not become cyclical
-// because of the lockout delay
-
-void viralPostponeWarmSleep() {
-  if (viralButtonPressLockoutTimer.isExpired()) {
-    viralButtonPressLockoutTimer.set(VIRAL_BUTTON_PRESS_LOCKOUT_MS);
-
-    FOREACH_FACE(f) { faces[f].header.postpone_sleep = true; }
-
-    // Prevent warm sleep
-    blinklib::warm_sleep::internal::ResetTimer();
-  }
-}
-
-static void RX_IRFaces() {
-  //  Use these pointers to step though the arrays
-  face_t *face = faces;
-  volatile ir_rx_state_t *ir_rx_state = blinkbios_irdata_block.ir_rx_states;
-
-  FOREACH_FACE(f) {
-    // Check for anything new coming in...
-
-    if (ir_rx_state->packetBufferReady) {
-      // Got something, so we know there is someone out there
-      // TODO: Should we require the received packet to pass error checks?
-      face->expireTime = blinklib::time::internal::now + RX_EXPIRE_TIME_MS;
-
-      // This is slightly ugly. To save a buffer, we get the full packet with
-      // the BlinkBIOS IR packet type byte.
-
-      volatile const uint8_t *packetData = (ir_rx_state->packetBuffer);
-
-      if (*packetData++ ==
-          IR_USER_DATA_HEADER_BYTE) {  // We only process user data and ignore
-                                       // (and consume) anything else. This is
-                                       // ugly. Sorry.
-
-        uint8_t packetDataLen = (ir_rx_state->packetBufferLen) -
-                                1;  // deduct the BlinkBIOS packet type  byte
-
-        // Clear to send on this face immediately to ping-pong
-        // messages at max speed without collisions
-        face->sendTime = 0;
-
-        // Save face value.
-        face->inValue = packetData[0];
-
-        if (packetDataLen > 1) {
-          // Guaranteed delivery: Parse incoming header.
-          header_t incoming_header;
-          incoming_header.as_byte = packetData[1];
-
-          if (incoming_header.non_special) {
-            // Normal datagram.
-
-            if (incoming_header.postpone_sleep) {
-              // The blink on on the other side of this connection
-              // is telling us that a button was pressed recently
-              // Send the viral message to all neighbors.
-
-              viralPostponeWarmSleep();
-
-              // We also need to extend hardware sleep
-              // since we did not get a physical button press
-              BLINKBIOS_POSTPONE_SLEEP_VECTOR();
-            }
-
-            if (incoming_header.ack_sequence == face->header.sequence) {
-              // We received an ack for the datagram we were sending. Mark it as
-              // delivered.
-              face->outDatagramLen = 0;
-            }
-
-            if (packetDataLen > 2) {
-              // We also received a datagram to process.
-              if (incoming_header.sequence != face->header.ack_sequence) {
-                // Looks like a new one. Record it and start sending acks for
-                // it.
-                face->header.ack_sequence = incoming_header.sequence;
-                face->inDatagramLen = packetDataLen - 2;
-                memcpy(&face->inDatagramData, (const void *)&packetData[2],
-                       face->inDatagramLen);
-              } else {
-                // Resend. Just ignore it and continue sending ack.
-                face->send_header = true;
-              }
-            }
-          } else {
-            // Special packet.
-            if (packetData[0] == TRIGGER_WARM_SLEEP_SPECIAL_VALUE &&
-                packetData[1] == TRIGGER_WARM_SLEEP_SPECIAL_VALUE) {
-              blinklib::warm_sleep::internal::Enter();
-            }
-          }
-        }
-      }
-    }
-
-    // No matter what, mark buffer as read so we can get next packet
-    ir_rx_state->packetBufferReady = 0;
-
-    // Increment our pointers.
-    face++;
-    ir_rx_state++;
-  }
-}
-
-// Buffer to build each outgoing IR packet
-// This is the easy way to do this, but uses RAM unnecessarily.
-// TODO: Make a scatter version of this to save RAM & time
-
-static void TX_IRFaces() {
-  //  Use these pointers to step though the arrays
-  face_t *face = faces;
-
-  FOREACH_FACE(f) {
-    // Send one out too if it is time....
-
-    if (face->sendTime <=
-        blinklib::time::internal::now) {  // Time to send on this face?
-      // Note that we do not use the rx_fresh flag here because we want the
-      // timeout to do automatic retries to kickstart things when a new
-      // neighbor shows up or when an IR message gets missed
-
-      face->header.non_special = true;
-
-      // Total length of the outgoing packet in ir_send_packet_buffer. Face
-      // value + header + datagram + checksum.
-      byte outgoingPacketLen =
-          1 +
-          (face->send_header || face->header.postpone_sleep ||
-           (face->outDatagramLen != 0)) +
-          face->outDatagramLen;
-
-      // Ok, it is time to send something on this face.
-
-      // Send packet.
-      if (blinkbios_irdata_send_packet(f, (const byte *)&face->outValue,
-                                       outgoingPacketLen)) {
-        face->send_header = false;
-        face->header.postpone_sleep = false;
-      }
-
-      // If the above returns 0, then we could not send because there was an RX
-      // in progress on this face. In this case we will send this packet again
-      // when the ongoing transfer finishes.
-
-      // Guaranteed delivery: If it returns non-zero, we can not be sure the
-      // datagream was received at the other end so we wait for confirmation
-      // before marking the data as sent.
-
-      // Here we set a timeout to keep periodically probing on this face,
-      // but if there is a neighbor, they will send back to us as soon as
-      // they get what we just transmitted, which will make us immediately
-      // send again. So the only case when this probe timeout will happen is
-      // if there is no neighbor there or if transmitting a datagram took more
-      // time than the probe timeout (which will happen with big datagrams).
-      // Note we are using the "real" time here to offset the actual time it
-      // takes to send the datagram (16 byte datagrams take up to 65 ms to
-      // transmit currently).
-      face->sendTime =
-          blinklib::time::internal::currentMillis() + TX_PROBE_TIME_MS;
-    }
-    face++;
-  }
-}
-
-// Returns the last received state on the indicated face
-// Remember that getNeighborState() starts at 0 on powerup.
-// so returns 0 if no neighbor ever seen on this face since power-up
-// so best to only use after checking if face is not expired first.
-// Note the a face expiring has no effect on the getNeighborState()
-
-byte getLastValueReceivedOnFace(byte face) { return faces[face].inValue; }
-
-// Did the neighborState value on this face change since the
-// last time we checked?
-// Remember that getNeighborState starts at 0 on powerup.
-// Note the a face expiring has no effect on the getNeighborState()
-
-bool didValueOnFaceChange(byte face) {
-  static byte prevState[FACE_COUNT];
-
-  byte curState = getLastValueReceivedOnFace(face);
-
-  if (curState == prevState[face]) {
-    return false;
-  }
-  prevState[face] = curState;
-
-  return true;
-}
-
-bool isValueReceivedOnFaceExpired(byte face) {
-  return faces[face].expireTime < blinklib::time::internal::now;
-}
-
-// Returns false if their has been a neighbor seen recently on any face, true
-// otherwise.
-
-bool isAlone() {
-  FOREACH_FACE(f) {
-    if (!isValueReceivedOnFaceExpired(f)) {
-      return false;
-    }
-  }
-  return true;
-}
-
-// Set our broadcasted state on all faces to newState.
-// This state is repeatedly broadcast to any neighboring tiles.
-
-// By default we power up in state 0.
-
-void setValueSentOnAllFaces(byte value) {
-  FOREACH_FACE(f) { faces[f].outValue = value; }
-}
-
-// Set our broadcasted state on indicated face to newState.
-// This state is repeatedly broadcast to the partner tile on the indicated
-// face.
-
-// By default we power up in state 0.
-
-void setValueSentOnFace(byte value, byte face) { faces[face].outValue = value; }
 
 // --------------Button code
 
@@ -891,12 +557,12 @@ void __attribute__((noreturn)) run(void) {
     if (blinkbios_button_block.bitflags &
         BUTTON_BITFLAG_PRESSED) {  // Any button press resets the warm sleep
                                    // timeout
-      viralPostponeWarmSleep();
+      blinklib::ir::internal::MaybeEnableSendPostponeWarmSleep();
     }
 
     // Update the IR RX state
     // Receive any pending packets
-    RX_IRFaces();
+    blinklib::ir::internal::ReceiveFaceData();
 
     cli();
     buttonSnapshotDown = blinkbios_button_block.down;
@@ -916,7 +582,7 @@ void __attribute__((noreturn)) run(void) {
 
     // Transmit any IR packets waiting to go out
     // Note that we do this after loop had a chance to update them.
-    TX_IRFaces();
+    blinklib::ir::internal::SendFaceData();
 
     if (blinklib::warm_sleep::internal::timer_.isExpired()) {
       blinklib::warm_sleep::internal::Enter();
