@@ -41,6 +41,7 @@
 
 #include "blinklib_led_internal.h"
 #include "blinklib_time_internal.h"
+#include "blinklib_warm_sleep_internal.h"
 #include "shared/blinkbios_shared_button.h"
 #include "shared/blinkbios_shared_functions.h"  // Gets us ir_send_packet()
 #include "shared/blinkbios_shared_irdata.h"
@@ -59,35 +60,6 @@
   2000  // Any viral button presses received from IR within this time period are
         // ignored since insures that a single press can not circulate around
         // indefinitely.
-
-#define WARM_SLEEP_TIMEOUT_MS \
-  (10 * 60 * 1000UL)  // 10 mins
-                      // We will warm sleep if we do not see a button press or
-                      // remote button press in this long
-
-// This is a special byte that signals that this is a long data packet
-// Note that this is also a value value, but we can tell that it is a data by
-// looking at the IR packet len. Datagrams are always >2 bytes. It must appear
-// in the first byte of the data, and the final byte is an inverted checksum of
-// all bytes including this header byte
-
-#define DATAGRAM_SPECIAL_VALUE 0b00101010
-
-// This is a special byte that triggers a warm sleep cycle when received
-// It must appear in the first & second byte of data
-// When we get it, we virally send out more warm sleep packets on all the faces
-// and then we go to warm sleep.
-
-#define TRIGGER_WARM_SLEEP_SPECIAL_VALUE 0b00010101
-
-// This is a special byte that does nothing.
-// It must appear in the first & second byte of data.
-// We send it when we warm wake to warm wake our neighbors.
-
-#define NOP_SPECIAL_VALUE 0b00110011
-
-// TODO: These structs even better if they are padded to a power of 2 like
-// https://stackoverflow.com/questions/1239855/pad-a-c-structure-to-a-power-of-two
 
 #if IR_DATAGRAM_LEN > IR_RX_PACKET_SIZE
 #error IR_DATAGRAM_LEN must not be bigger than IR_RX_PACKET_SIZE
@@ -183,26 +155,6 @@ bool sendDatagramOnFace(const void *data, byte len, byte face) {
   return true;
 }
 
-static void __attribute__((noinline)) clear_packet_buffers() {
-  FOREACH_FACE(f) {
-    blinkbios_irdata_block.ir_rx_states[f].packetBufferReady = 0;
-  }
-}
-
-// Set the color and display it immediately
-// for internal use where we do not want the loop buffering
-
-static void __attribute__((noinline)) setColorNow(Color newColor) {
-  setColor(newColor);
-  BLINKBIOS_DISPLAY_PIXEL_BUFFER_VECTOR();
-}
-
-Color dim(Color color, byte brightness) {
-  return MAKECOLOR_5BIT_RGB((GET_5BIT_R(color) * brightness) / MAX_BRIGHTNESS,
-                            (GET_5BIT_G(color) * brightness) / MAX_BRIGHTNESS,
-                            (GET_5BIT_B(color) * brightness) / MAX_BRIGHTNESS);
-}
-
 Color lighten(Color color, byte brightness) {
   return MAKECOLOR_5BIT_RGB(
       (GET_5BIT_R(color) +
@@ -216,196 +168,6 @@ Color lighten(Color color, byte brightness) {
         MAX_BRIGHTNESS)));
 }
 
-// When will we warm sleep due to inactivity
-// reset by a button press or seeing a button press bit on
-// an incoming packet
-
-Timer warm_sleep_time;
-
-void reset_warm_sleep_timer() { warm_sleep_time.set(WARM_SLEEP_TIMEOUT_MS); }
-
-// Remembers if we have woken from either a BIOS sleep or
-// a blinklib forced sleep.
-
-uint8_t hasWarmWokenFlag = 0;
-
-#define SLEEP_ANIMATION_DURATION_MS 300
-#define SLEEP_ANIMATION_MAX_BRIGHTNESS 200
-
-// A special warm sleep trigger packet has len 2 and the two bytes are both the
-// special cookie value Because it must be 2 long, this means that the cookie
-// can still be a data value since that value would only have a 1 byte packet
-
-static uint8_t force_sleep_packet[2] = {TRIGGER_WARM_SLEEP_SPECIAL_VALUE,
-                                        TRIGGER_WARM_SLEEP_SPECIAL_VALUE};
-
-// This packet does nothing except wake up our neighbors
-
-static uint8_t nop_wake_packet[2] = {NOP_SPECIAL_VALUE, NOP_SPECIAL_VALUE};
-
-#define SLEEP_PACKET_REPEAT_COUNT \
-  5  // How many times do we send the sleep and wake packets for redunancy?
-
-static void warm_sleep_cycle() {
-  BLINKBIOS_POSTPONE_SLEEP_VECTOR();  // Postpone cold sleep so we can warm
-                                      // sleep for a while
-  // The cold sleep will eventually kick in if we
-  // do not wake from warm sleep in time.
-
-  // Save the games pixels so we can restore them on waking
-  // we need to do this because the sleep and wake animations
-  // will overwrite whatever is there.
-
-  blinklib::led::internal::SaveState();
-
-  // Ok, now we are virally sending FORCE_SLEEP out on all faces to spread the
-  // word and the pixels are off so the user is happy and we are saving power.
-
-  // First send the force sleep packet out to all our neighbors
-  // We are indiscriminate, just splat it 5 times everywhere.
-  // This is a brute force approach to make sure we get though even with
-  // collisions and long packets in flight.
-
-  // We also show a little animation while transmitting the packets
-
-  // Figure out how much brightness to animate on each packet
-
-  const int animation_fade_step =
-      SLEEP_ANIMATION_MAX_BRIGHTNESS / (SLEEP_PACKET_REPEAT_COUNT * FACE_COUNT);
-
-  uint8_t fade_brightness;
-
-  // For the sleep animation we start bright and dim to 0 by the end
-
-  // This code picks a start near to SLEEP_ANIMATION_MAX_BRIGHTNESS that makes
-  // sure we end up at 0
-  fade_brightness = SLEEP_ANIMATION_MAX_BRIGHTNESS;
-
-  for (uint8_t n = 0; n < SLEEP_PACKET_REPEAT_COUNT; n++) {
-    FOREACH_FACE(f) {
-      setColorNow(dim(BLUE, fade_brightness));
-
-      fade_brightness -= animation_fade_step;
-
-      // while ( blinkbios_is_rx_in_progress( f ) );     // Wait to clear to
-      // send (no guarantee, but better than just blink sending)
-
-      blinkbios_irdata_send_packet(f, force_sleep_packet, 2);
-    }
-  }
-
-  // Ensure that we end up completely off
-  setColorNow(OFF);
-
-  // We need to save the time now because it will keep ticking while we are in
-  // pre-sleep (where were can get woken back up by a packet). If we did not
-  // save it and then restore it later, then all the user timers would be
-  // expired when we woke.
-
-  // Save the time now so we can go back in time when we wake up
-  cli();
-  millis_t save_time = blinkbios_millis_block.millis;
-  sei();
-
-  // OK we now appear asleep
-  // We are not sending IR so some power savings
-  // For the next 2 hours will will wait for a wake up signal
-  // TODO: Make this even more power efficient by sleeping between checks for
-  // incoming IR.
-
-  blinkbios_button_block.bitflags = 0;
-
-  // Here is wuld be nice to idle the CPU for a bit of power savings, but there
-  // is a potential race where the BIOS could put us into deep sleep mode and
-  // then our idle would be deep sleep. you'd think we could turn of ints and
-  // set out mode right before entering idle, but we needs ints on to wake form
-  // idle on AVR.
-
-  clear_packet_buffers();  // Clear out any left over packets that were there
-                           // when we started this sleep cycle and might trigger
-                           // us to wake unapropriately
-
-  uint8_t saw_packet_flag = 0;
-
-  // Wait in idle mode until we either see a non-force-sleep packet or a button
-  // press or woke. Why woke? Because eventually the BIOS will make us powerdown
-  // sleep inside this loop When that happens, it will take a button press to
-  // wake us
-
-  blinkbios_button_block.wokeFlag = 1;  // // Set to 0 upon waking from sleep
-
-  while (!saw_packet_flag &&
-         !(blinkbios_button_block.bitflags & BUTTON_BITFLAG_PRESSED) &&
-         blinkbios_button_block.wokeFlag) {
-    // TODO: This sleep mode currently uses about 2mA. We can get that way down
-    // by...
-    //       1. Adding a supporess_display_flag to pixel_block to skip all of
-    //       the display code when in this mode
-    //       2. Adding a new_pack_recieved_flag to ir_block so we only scan when
-    //       there is a new packet
-    // UPDATE: Tried all that and it only saved like 0.1-0.2mA and added dozens
-    // of bytes of code so not worth it.
-
-    ir_rx_state_t *ir_rx_state = blinkbios_irdata_block.ir_rx_states;
-
-    FOREACH_FACE(f) {
-      if (ir_rx_state->packetBufferReady) {
-        if (ir_rx_state->packetBuffer[1] == NOP_SPECIAL_VALUE &&
-            ir_rx_state->packetBuffer[2] == NOP_SPECIAL_VALUE) {
-          saw_packet_flag = 1;
-        }
-
-        ir_rx_state->packetBufferReady = 0;
-      }
-
-      ir_rx_state++;
-    }
-  }
-
-  cli();
-  blinkbios_millis_block.millis = save_time;
-  BLINKBIOS_POSTPONE_SLEEP_VECTOR();  // It is ok top call like this to reset
-                                      // the inactivity timer
-  sei();
-
-  hasWarmWokenFlag = 1;  // Remember that we warm slept
-  reset_warm_sleep_timer();
-
-  // Forced sleep mode
-  // Really need button down detection in bios so we only wake on lift...
-  // BLINKBIOS_SLEEP_NOW_VECTOR();
-
-  // Clear out old packets (including any old FORCE_SLEEP packets so we don't go
-  // right back to bed)
-
-  clear_packet_buffers();
-
-  // Show smooth wake animation
-
-  // This loop empirically works out to be about the right delay.
-  // I know this hardcode is hackyish, but we need to save flash space
-
-  // For the wake animation we start off and dim to MAX by the end
-
-  // This code picks a start near to SLEEP_ANIMATION_MAX_BRIGHTNESS that makes
-  // sure we end up at 0
-  fade_brightness = 0;
-
-  for (uint8_t n = 0; n < SLEEP_PACKET_REPEAT_COUNT; n++) {
-    FOREACH_FACE(f) {
-      // INcrement first - they are already seeing OFF when we start
-      fade_brightness += animation_fade_step;
-      setColorNow(dim(WHITE, fade_brightness));
-
-      blinkbios_irdata_send_packet(f, nop_wake_packet, 2);
-    }
-  }
-
-  // restore game pixels
-
-  blinklib::led::internal::RestoreState();
-}
-
 // Called anytime a the button is pressed or anytime we get a viral button press
 // form a neighbor over IR Note that we know that this can not become cyclical
 // because of the lockout delay
@@ -417,7 +179,7 @@ void viralPostponeWarmSleep() {
     FOREACH_FACE(f) { faces[f].header.postpone_sleep = true; }
 
     // Prevent warm sleep
-    reset_warm_sleep_timer();
+    blinklib::warm_sleep::internal::ResetTimer();
   }
 }
 
@@ -498,7 +260,7 @@ static void RX_IRFaces() {
             // Special packet.
             if (packetData[0] == TRIGGER_WARM_SLEEP_SPECIAL_VALUE &&
                 packetData[1] == TRIGGER_WARM_SLEEP_SPECIAL_VALUE) {
-              warm_sleep_cycle();
+              blinklib::warm_sleep::internal::Enter();
             }
           }
         }
@@ -926,9 +688,9 @@ byte getBlinkbiosVersion() { return BLINKBIOS_VERSION_VECTOR(); }
 bool hasWoken() {
   bool ret = false;
 
-  if (hasWarmWokenFlag) {
+  if (blinklib::warm_sleep::internal::has_warm_woken_flag_) {
     ret = true;
-    hasWarmWokenFlag = 0;
+    blinklib::warm_sleep::internal::has_warm_woken_flag_ = 0;
   }
 
   if (blinkbios_button_block.wokeFlag ==
@@ -954,43 +716,6 @@ uint8_t startState(void) {
   // Safe catch all to be safe in case new ones are ever added
   return START_STATE_POWER_UP;
 }
-
-// --- Pixel functions
-
-// Change the tile to the specified color
-// NOTE: all color changes are double buffered
-// and the display is updated when loop() returns
-
-// Set the pixel on the specified face (0-5) to the specified color
-// NOTE: all color changes are double buffered
-// and the display is updated when loop() returns
-
-// A buffer for the colors.
-// We use a buffer so we can update all faces at once during a vertical
-// retrace to avoid visual tearing from partially applied updates
-
-void setColorOnFace(Color newColor, byte face) {
-  // This is so ugly, but we need to match the volatile in the shared block to
-  // the newColor There must be a better way, but I don't know it other than a
-  // memcpy which is even uglier!
-
-  // This at least gets the semantics right of coping a snapshot of the actual
-  // value.
-
-  blinkbios_pixel_block.pixelBuffer[face].as_uint16 =
-      newColor.as_uint16;  // Size = 1940 bytes
-
-  // This BTW compiles much worse
-
-  //  *( const_cast<Color *> (&blinkbios_pixel_block.pixelBuffer[face])) =
-  //  newColor;       // Size = 1948 bytes
-}
-
-void setColor(Color newColor) {
-  FOREACH_FACE(f) { setColorOnFace(newColor, f); }
-}
-
-void setFaceColor(byte face, Color newColor) { setColorOnFace(newColor, face); }
 
 // This truly lovely code from the FastLED library
 // https://github.com/FastLED/FastLED/blob/master/lib8tion/trig8.h
@@ -1084,7 +809,7 @@ void __attribute__((noreturn)) run(void) {
                                           // that when we reset the warm sleep
                                           // counter it is right, and so setup
                                           // sees the right millis time
-  reset_warm_sleep_timer();
+  blinklib::warm_sleep::internal::ResetTimer();
 
   statckwatcher_init();  // Set up the sentinel byte at the top of RAM used by
                          // variables so we can tell if stack clobbered it
@@ -1137,7 +862,7 @@ void __attribute__((noreturn)) run(void) {
       if (blinkbios_button_block.bitflags & BUTTON_BITFLAG_6SECPRESSED) {
         // Held down past the 7 second mark, so this is a force sleep request
 
-        warm_sleep_cycle();
+        blinklib::warm_sleep::internal::Enter();
       } else {
         // They let go before we got to 7 seconds, so enter SEED mode! (and
         // never return!)
@@ -1145,7 +870,7 @@ void __attribute__((noreturn)) run(void) {
         // Give instant visual feedback that we know they let go of the button
         // Costs a few bytes, but the checksum in the bootloader takes a a sec
         // to complete before we start sending)
-        setColorNow(OFF);
+        blinklib::led::internal::SetColorNow(OFF);
 
         BLINKBIOS_BOOTLOADER_SEED_VECTOR();
 
@@ -1154,7 +879,7 @@ void __attribute__((noreturn)) run(void) {
     }
 
     if ((blinkbios_button_block.bitflags & BUTTON_BITFLAG_6SECPRESSED)) {
-      warm_sleep_cycle();
+      blinklib::warm_sleep::internal::Enter();
     }
 
     // Capture time snapshot
@@ -1193,8 +918,8 @@ void __attribute__((noreturn)) run(void) {
     // Note that we do this after loop had a chance to update them.
     TX_IRFaces();
 
-    if (warm_sleep_time.isExpired()) {
-      warm_sleep_cycle();
+    if (blinklib::warm_sleep::internal::timer_.isExpired()) {
+      blinklib::warm_sleep::internal::Enter();
     }
   }
 }
