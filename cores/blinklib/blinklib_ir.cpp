@@ -59,15 +59,15 @@ struct FaceData {
   byte inDatagramData[IR_DATAGRAM_LEN];
   byte inDatagramLen;  // 0= No datagram waiting to be read
 
-  millis_t expireTime;  // When this face will be considered to be expired (no
-                        // neighbor there)
+  Timer expireTime;  // When this face will be considered to be expired (no
+                     // neighbor there)
 
   byte outValue;  // Value we send out on this face
   Header header;
   byte outDatagramData[IR_DATAGRAM_LEN];
   byte outDatagramLen;  // 0= No datagram waiting to be sent
 
-  millis_t
+  Timer
       sendTime;  // Next time we will transmit on this face (set to 0 every time
                  // we get a good message so we ping-pong across the link)
 
@@ -105,7 +105,7 @@ void ReceiveFaceData() {
     if (ir_rx_state->packetBufferReady) {
       // Got something, so we know there is someone out there
       // TODO: Should we require the received packet to pass error checks?
-      face_data->expireTime = blinklib::time::internal::now + RX_EXPIRE_TIME_MS;
+      face_data->expireTime.set(RX_EXPIRE_TIME_MS);
 
       // This is slightly ugly. To save a buffer, we get the full packet with
       // the BlinkBIOS IR packet type byte.
@@ -122,7 +122,7 @@ void ReceiveFaceData() {
 
         // Clear to send on this face immediately to ping-pong
         // messages at max speed without collisions
-        face_data->sendTime = 0;
+        face_data->sendTime.set(0);
 
         // Save face value.
         face_data->inValue = packetData[0];
@@ -194,8 +194,7 @@ void SendFaceData() {
   FOREACH_FACE(f) {
     // Send one out too if it is time....
 
-    if (face_data->sendTime <=
-        blinklib::time::internal::now) {  // Time to send on this face?
+    if (face_data->sendTime.isExpired()) {  // Time to send on this face?
       // Note that we do not use the rx_fresh flag here because we want the
       // timeout to do automatic retries to kickstart things when a new
       // neighbor shows up or when an IR message gets missed
@@ -235,8 +234,8 @@ void SendFaceData() {
       // Note we are using the "real" time here to offset the actual time it
       // takes to send the datagram (16 byte datagrams take up to 65 ms to
       // transmit currently).
-      face_data->sendTime =
-          blinklib::time::internal::currentMillis() + TX_PROBE_TIME_MS;
+      face_data->sendTime.set(blinklib::time::internal::currentMillis() -
+                              blinklib::time::internal::now + TX_PROBE_TIME_MS);
     }
     face_data++;
   }
@@ -302,7 +301,7 @@ bool didValueOnFaceChange(byte face) {
 }
 
 bool __attribute__((noinline)) isValueReceivedOnFaceExpired(byte face) {
-  return face_data_[face].expireTime < blinklib::time::internal::now;
+  return face_data_[face].expireTime.isExpired();
 }
 
 bool isAlone() {
