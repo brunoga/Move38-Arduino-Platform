@@ -21,8 +21,7 @@
 
 #include <avr/interrupt.h>  // cli() and sei() so we can get snapshots of multibyte variables
 #include <avr/pgmspace.h>  // PROGMEM for parity lookup table
-#include <avr/sleep.h>     // sleep_cpu() so we can rest between interrupts.
-#include <avr/wdt.h>  // Used in randomize() to get some entropy from the skew between the WDT osicilator and the system clock.
+#include <avr/wdt.h>  // Used in randomize() to get some entropy from the skew between the WDT oscilator and the system clock.
 #include <limits.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -181,7 +180,7 @@ Color makeColorHSB(uint8_t hue, uint8_t saturation, uint8_t brightness) {
   return (makeColorRGB(r, g, b));
 }
 
-// OMG, the Ardiuno rand() function is just a mod! We at least want a uniform
+// OMG, the Arduino rand() function is just a mod! We at least want a uniform
 // distibution.
 
 // We base our generator on a 32-bit Marsaglia XOR shifter

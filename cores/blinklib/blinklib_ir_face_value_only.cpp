@@ -1,6 +1,6 @@
 #include "blinklib_settings.h"
 
-#ifndef BGA_CUSTOM_BLINKLIB_DISABLE_DATAGRAM
+#ifdef BGA_CUSTOM_BLINKLIB_DISABLE_DATAGRAM
 
 #include <string.h>
 
@@ -56,22 +56,16 @@ union Header {
 struct FaceData {
   byte inValue;  // Last received value on this face, or 0 if no neighbor
                  // ever seen since startup
-  byte inDatagramData[IR_DATAGRAM_LEN];
-  byte inDatagramLen;  // 0= No datagram waiting to be read
 
   millis_t expireTime;  // When this face will be considered to be expired (no
                         // neighbor there)
 
   byte outValue;  // Value we send out on this face
   Header header;
-  byte outDatagramData[IR_DATAGRAM_LEN];
-  byte outDatagramLen;  // 0= No datagram waiting to be sent
 
   millis_t
       sendTime;  // Next time we will transmit on this face (set to 0 every time
                  // we get a good message so we ping-pong across the link)
-
-  bool send_header;
 };
 
 static FaceData face_data_[FACE_COUNT];
@@ -146,27 +140,6 @@ void ReceiveFaceData() {
               // since we did not get a physical button press
               BLINKBIOS_POSTPONE_SLEEP_VECTOR();
             }
-
-            if (incoming_header.ack_sequence == face_data->header.sequence) {
-              // We received an ack for the datagram we were sending. Mark it as
-              // delivered.
-              face_data->outDatagramLen = 0;
-            }
-
-            if (packetDataLen > 2) {
-              // We also received a datagram to process.
-              if (incoming_header.sequence != face_data->header.ack_sequence) {
-                // Looks like a new one. Record it and start sending acks for
-                // it.
-                face_data->header.ack_sequence = incoming_header.sequence;
-                face_data->inDatagramLen = packetDataLen - 2;
-                memcpy(&face_data->inDatagramData, (const void *)&packetData[2],
-                       face_data->inDatagramLen);
-              } else {
-                // Resend. Just ignore it and continue sending ack.
-                face_data->send_header = true;
-              }
-            }
           } else {
             // Special packet.
             if (packetData[0] == TRIGGER_WARM_SLEEP_SPECIAL_VALUE &&
@@ -203,18 +176,13 @@ void SendFaceData() {
       face_data->header.non_special = true;
 
       // Total length of the outgoing packet. Face value + header + datagram.
-      byte outgoingPacketLen =
-          1 +
-          (face_data->send_header || face_data->header.postpone_sleep ||
-           (face_data->outDatagramLen != 0)) +
-          face_data->outDatagramLen;
+      byte outgoingPacketLen = 1 + face_data->header.postpone_sleep;
 
       // Ok, it is time to send something on this face.
 
       // Send packet.
       if (BLINKBIOS_IRDATA_SEND_PACKET_VECTOR(
               f, (const byte *)&face_data->outValue, outgoingPacketLen)) {
-        face_data->send_header = false;
         face_data->header.postpone_sleep = false;
       }
 
@@ -252,7 +220,9 @@ using blinklib::ir::internal::face_data_;
 using blinklib::ir::internal::FaceData;
 
 byte getDatagramLengthOnFace(byte face) {
-  return face_data_[face].inDatagramLen;
+  (void)face;
+
+  return 0;
 }
 
 bool isDatagramReadyOnFace(byte face) {
@@ -260,29 +230,25 @@ bool isDatagramReadyOnFace(byte face) {
 }
 
 bool isDatagramPendingOnFace(byte face) {
-  return face_data_[face].outDatagramLen != 0;
+  (void)face;
+
+  return false;
 }
 
 const byte *getDatagramOnFace(byte face) {
-  return face_data_[face].inDatagramData;
+  (void)face;
+
+  return nullptr;
 }
 
-void markDatagramReadOnFace(byte face) { face_data_[face].inDatagramLen = 0; }
+void markDatagramReadOnFace(byte face) { (void)face; }
 
 bool sendDatagramOnFace(const void *data, byte len, byte face) {
-  if (len > IR_DATAGRAM_LEN) return false;
+  (void)data;
+  (void)len;
+  (void)face;
 
-  FaceData *face_data = &face_data_[face];
-
-  if (face_data->outDatagramLen != 0) return false;
-
-  // Guaranteed delivery: Increment sequence number.
-  face_data->header.sequence = (face_data->header.sequence % 7) + 1;
-
-  face_data->outDatagramLen = len;
-  memcpy(face_data->outDatagramData, data, len);
-
-  return true;
+  return false;
 }
 
 byte getLastValueReceivedOnFace(byte face) { return face_data_[face].inValue; }
