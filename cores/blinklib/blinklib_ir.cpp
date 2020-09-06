@@ -222,7 +222,7 @@ void SendFaceData() {
       // when the ongoing transfer finishes.
 
       // Guaranteed delivery: If it returns non-zero, we can not be sure the
-      // datagream was received at the other end so we wait for confirmation
+      // datagram was received at the other end so we wait for confirmation
       // before marking the data as sent.
 
       // Here we set a timeout to keep periodically probing on this face,
