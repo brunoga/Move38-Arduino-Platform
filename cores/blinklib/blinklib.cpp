@@ -73,7 +73,7 @@ static uint8_t
 
 bool buttonDown(void) { return buttonSnapshotDown != 0; }
 
-static bool grabandclearbuttonflag(uint8_t flagbit) {
+static bool __attribute__((noinline)) grabandclearbuttonflag(uint8_t flagbit) {
   bool r = buttonSnapshotBitflags & flagbit;
   buttonSnapshotBitflags &= ~flagbit;
   return r;
@@ -116,7 +116,7 @@ bool buttonLongLongPressed() {
 
 // --- Utility functions
 
-Color makeColorRGB(byte red, byte green, byte blue) {
+Color __attribute__((noinline)) makeColorRGB(byte red, byte green, byte blue) {
   // Internal color representation is only 5 bits, so we have to divide down
   // from 8 bits
   return Color(red >> 3, green >> 3, blue >> 3);
