@@ -47,19 +47,6 @@
 #include "shared/blinkbios_shared_irdata.h"
 #include "shared/blinkbios_shared_pixel.h"
 
-Color lighten(Color color, byte brightness) {
-  return MAKECOLOR_5BIT_RGB(
-      (GET_5BIT_R(color) +
-       (((MAX_BRIGHTNESS_5BIT - (GET_5BIT_R(color))) * brightness) /
-        MAX_BRIGHTNESS)),
-      (GET_5BIT_G(color) +
-       (((MAX_BRIGHTNESS_5BIT - (GET_5BIT_G(color))) * brightness) /
-        MAX_BRIGHTNESS)),
-      (GET_5BIT_B(color) +
-       (((MAX_BRIGHTNESS_5BIT - (GET_5BIT_B(color))) * brightness) /
-        MAX_BRIGHTNESS)));
-}
-
 // --------------Button code
 
 // Here we keep a local snapshot of the button block stuff
@@ -115,70 +102,6 @@ bool buttonLongLongPressed() {
 }
 
 // --- Utility functions
-
-Color __attribute__((noinline)) makeColorRGB(byte red, byte green, byte blue) {
-  // Internal color representation is only 5 bits, so we have to divide down
-  // from 8 bits
-  return Color(red >> 3, green >> 3, blue >> 3);
-}
-
-Color makeColorHSB(uint8_t hue, uint8_t saturation, uint8_t brightness) {
-  uint8_t r;
-  uint8_t g;
-  uint8_t b;
-
-  if (saturation == 0) {
-    // achromatic (grey)
-    r = g = b = brightness;
-  } else {
-    unsigned int scaledHue = (hue * 6);
-    unsigned int sector =
-        scaledHue >> 8;  // sector 0 to 5 around the color wheel
-    unsigned int offsetInSector =
-        scaledHue - (sector << 8);  // position within the sector
-    unsigned int p = (brightness * (255 - saturation)) >> 8;
-    unsigned int q =
-        (brightness * (255 - ((saturation * offsetInSector) >> 8))) >> 8;
-    unsigned int t =
-        (brightness * (255 - ((saturation * (255 - offsetInSector)) >> 8))) >>
-        8;
-
-    switch (sector) {
-      case 0:
-        r = brightness;
-        g = t;
-        b = p;
-        break;
-      case 1:
-        r = q;
-        g = brightness;
-        b = p;
-        break;
-      case 2:
-        r = p;
-        g = brightness;
-        b = t;
-        break;
-      case 3:
-        r = p;
-        g = q;
-        b = brightness;
-        break;
-      case 4:
-        r = t;
-        g = p;
-        b = brightness;
-        break;
-      default:  // case 5:
-        r = brightness;
-        g = p;
-        b = q;
-        break;
-    }
-  }
-
-  return (makeColorRGB(r, g, b));
-}
 
 // OMG, the Arduino rand() function is just a mod! We at least want a uniform
 // distibution.

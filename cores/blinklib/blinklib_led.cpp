@@ -72,10 +72,82 @@ void setColor(Color newColor) {
   FOREACH_FACE(f) { setColorOnFace(newColor, f); }
 }
 
-void setFaceColor(byte face, Color newColor) { setColorOnFace(newColor, face); }
-
 Color dim(Color color, byte brightness) {
-  return MAKECOLOR_5BIT_RGB((GET_5BIT_R(color) * brightness) / MAX_BRIGHTNESS,
-                            (GET_5BIT_G(color) * brightness) / MAX_BRIGHTNESS,
-                            (GET_5BIT_B(color) * brightness) / MAX_BRIGHTNESS);
+  return {1, (byte)((color.r * brightness) / MAX_BRIGHTNESS),
+          (byte)((color.g * brightness) / MAX_BRIGHTNESS),
+          (byte)((color.b * brightness) / MAX_BRIGHTNESS)};
+}
+
+Color lighten(Color color, byte brightness) {
+  return {1,
+          (byte)(color.r + (((MAX_BRIGHTNESS_5BIT - color.r) * brightness) /
+                            MAX_BRIGHTNESS)),
+          (byte)(color.g + (((MAX_BRIGHTNESS_5BIT - color.g) * brightness) /
+                            MAX_BRIGHTNESS)),
+          (byte)(color.b + (((MAX_BRIGHTNESS_5BIT - color.b) * brightness) /
+                            MAX_BRIGHTNESS))};
+}
+
+Color __attribute__((noinline)) makeColorRGB(byte red, byte green, byte blue) {
+  // Internal color representation is only 5 bits, so we have to divide down
+  // from 8 bits
+  return {1, (byte)(red >> 3), (byte)(green >> 3), (byte)(blue >> 3)};
+}
+
+Color makeColorHSB(byte hue, byte saturation, byte brightness) {
+  byte r;
+  byte g;
+  byte b;
+
+  if (saturation == 0) {
+    // achromatic (grey)
+    r = g = b = brightness;
+  } else {
+    unsigned int scaledHue = (hue * 6);
+    unsigned int sector =
+        scaledHue >> 8;  // sector 0 to 5 around the color wheel
+    unsigned int offsetInSector =
+        scaledHue - (sector << 8);  // position within the sector
+    unsigned int p = (brightness * (255 - saturation)) >> 8;
+    unsigned int q =
+        (brightness * (255 - ((saturation * offsetInSector) >> 8))) >> 8;
+    unsigned int t =
+        (brightness * (255 - ((saturation * (255 - offsetInSector)) >> 8))) >>
+        8;
+
+    switch (sector) {
+      case 0:
+        r = brightness;
+        g = t;
+        b = p;
+        break;
+      case 1:
+        r = q;
+        g = brightness;
+        b = p;
+        break;
+      case 2:
+        r = p;
+        g = brightness;
+        b = t;
+        break;
+      case 3:
+        r = p;
+        g = q;
+        b = brightness;
+        break;
+      case 4:
+        r = t;
+        g = p;
+        b = brightness;
+        break;
+      default:  // case 5:
+        r = brightness;
+        g = p;
+        b = q;
+        break;
+    }
+  }
+
+  return (makeColorRGB(r, g, b));
 }

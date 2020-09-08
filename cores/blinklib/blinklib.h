@@ -87,24 +87,6 @@ bool buttonLongPressed();
 // down
 bool buttonLongLongPressed();
 
-// Brighten the specified color. Brightness is 0-255(0=unaltered color, 255=full
-// white)
-
-Color lighten(Color color, byte brightness);
-
-// This maps 0-255 values to 0-31 values with the special case that 0 (in 0-255)
-// is the only value that maps to 0 (in 0-31) This leads to some slight
-// non-linearity since there are not a uniform integral number of 1-255 values
-// to map to each of the 1-31 values.
-
-// Make a new color from RGB values. Each value can be 0-255.
-
-Color makeColorRGB(byte red, byte green, byte blue);
-
-// Make a new color in the HSB colorspace. All values are 0-255.
-
-Color makeColorHSB(byte hue, byte saturation, byte brightness);
-
 /*
 
     Utility functions

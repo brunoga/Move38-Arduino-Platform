@@ -17,36 +17,24 @@ typedef pixelColor_t Color;
 // to get the performance and size benefits of static compilation
 // Shame no way to do this right in C/C++
 
-#define MAKECOLOR_5BIT_RGB(r, g, b) (pixelColor_t(r, g, b, 1))
-
-#define RED MAKECOLOR_5BIT_RGB(MAX_BRIGHTNESS_5BIT, 0, 0)
-#define ORANGE \
-  MAKECOLOR_5BIT_RGB(MAX_BRIGHTNESS_5BIT, MAX_BRIGHTNESS_5BIT / 2, 0)
-#define YELLOW MAKECOLOR_5BIT_RGB(MAX_BRIGHTNESS_5BIT, MAX_BRIGHTNESS_5BIT, 0)
-#define GREEN MAKECOLOR_5BIT_RGB(0, MAX_BRIGHTNESS_5BIT, 0)
-#define CYAN MAKECOLOR_5BIT_RGB(0, MAX_BRIGHTNESS_5BIT, MAX_BRIGHTNESS_5BIT)
-#define BLUE MAKECOLOR_5BIT_RGB(0, 0, MAX_BRIGHTNESS_5BIT)
-#define MAGENTA MAKECOLOR_5BIT_RGB(MAX_BRIGHTNESS_5BIT, 0, MAX_BRIGHTNESS_5BIT)
-
-#define WHITE                                                  \
-  MAKECOLOR_5BIT_RGB(MAX_BRIGHTNESS_5BIT, MAX_BRIGHTNESS_5BIT, \
-                     MAX_BRIGHTNESS_5BIT)
-
-#define OFF MAKECOLOR_5BIT_RGB(0, 0, 0)
-
-#define GET_5BIT_R(color) (color.r)
-#define GET_5BIT_G(color) (color.g)
-#define GET_5BIT_B(color) (color.b)
-
-/*
-
-        This set of functions lets you control the colors on the face RGB LEDs
-
-*/
+const Color RED = {1, MAX_BRIGHTNESS_5BIT, 0, 0};
+const Color ORANGE = {1, MAX_BRIGHTNESS_5BIT, MAX_BRIGHTNESS_5BIT / 2, 0};
+const Color YELLOW = {1, MAX_BRIGHTNESS_5BIT, MAX_BRIGHTNESS_5BIT, 0};
+const Color GREEN = {1, 0, MAX_BRIGHTNESS_5BIT, 0};
+const Color CYAN = {1, 0, MAX_BRIGHTNESS_5BIT, MAX_BRIGHTNESS_5BIT};
+const Color BLUE = {1, 0, 0, MAX_BRIGHTNESS_5BIT};
+const Color MAGENTA = {1, MAX_BRIGHTNESS_5BIT, 0, MAX_BRIGHTNESS_5BIT};
+const Color WHITE = {1, MAX_BRIGHTNESS_5BIT, MAX_BRIGHTNESS_5BIT,
+                     MAX_BRIGHTNESS_5BIT};
+const Color OFF = {1, 0, 0, 0};
 
 // Dim the specified color. Brightness is 0-255 (0=off, 255=don't dim at
 // all-keep original color).
 Color dim(Color color, byte brightness);
+
+// Brighten the specified color. Brightness is 0-255 (0=unaltered color,
+// 255=full white).
+Color lighten(Color color, byte brightness);
 
 // Change the tile to the specified color.
 //
@@ -59,5 +47,16 @@ void setColor(Color newColor);
 // NOTE: All color changes are double buffered and the display is updated when
 // loop() returns.
 void setColorOnFace(Color newColor, byte face);
+
+// This maps 0-255 values to 0-31 values with the special case that 0 (in 0-255)
+// is the only value that maps to 0 (in 0-31) This leads to some slight
+// non-linearity since there are not a uniform integral number of 1-255 values
+// to map to each of the 1-31 values.
+
+// Make a new color from RGB values. Each value can be 0-255.
+Color makeColorRGB(byte red, byte green, byte blue);
+
+// Make a new color in the HSB colorspace. All values are 0-255.
+Color makeColorHSB(byte hue, byte saturation, byte brightness);
 
 #endif
