@@ -51,7 +51,7 @@ void __attribute__((noinline)) SetColorNow(Color new_color) {
 // We use a buffer so we can update all faces at once during a vertical
 // retrace to avoid visual tearing from partially applied updates
 
-void setColorOnFace(Color newColor, byte face) {
+void __attribute__((noinline)) setColorOnFace(Color newColor, byte face) {
   // This is so ugly, but we need to match the volatile in the shared block to
   // the newColor There must be a better way, but I don't know it other than a
   // memcpy which is even uglier!
@@ -68,7 +68,7 @@ void setColorOnFace(Color newColor, byte face) {
   //  newColor;       // Size = 1948 bytes
 }
 
-void setColor(Color newColor) {
+void __attribute__((noinline)) setColor(Color newColor) {
   FOREACH_FACE(f) { setColorOnFace(newColor, f); }
 }
 
