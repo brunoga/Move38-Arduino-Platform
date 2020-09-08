@@ -17,16 +17,24 @@ typedef pixelColor_t Color;
 // to get the performance and size benefits of static compilation
 // Shame no way to do this right in C/C++
 
-const Color RED = {1, MAX_BRIGHTNESS_5BIT, 0, 0};
-const Color ORANGE = {1, MAX_BRIGHTNESS_5BIT, MAX_BRIGHTNESS_5BIT / 2, 0};
-const Color YELLOW = {1, MAX_BRIGHTNESS_5BIT, MAX_BRIGHTNESS_5BIT, 0};
-const Color GREEN = {1, 0, MAX_BRIGHTNESS_5BIT, 0};
-const Color CYAN = {1, 0, MAX_BRIGHTNESS_5BIT, MAX_BRIGHTNESS_5BIT};
-const Color BLUE = {1, 0, 0, MAX_BRIGHTNESS_5BIT};
-const Color MAGENTA = {1, MAX_BRIGHTNESS_5BIT, 0, MAX_BRIGHTNESS_5BIT};
-const Color WHITE = {1, MAX_BRIGHTNESS_5BIT, MAX_BRIGHTNESS_5BIT,
-                     MAX_BRIGHTNESS_5BIT};
-const Color OFF = {1, 0, 0, 0};
+#define RED \
+  pixelColor_t { .as_uint16 = 63 }
+#define ORANGE \
+  pixelColor_t { .as_uint16 = 1023 }
+#define YELLOW \
+  pixelColor_t { .as_uint16 = 2047 }
+#define GREEN \
+  pixelColor_t { .as_uint16 = 1985 }
+#define CYAN \
+  pixelColor_t { .as_uint16 = 65473 }
+#define BLUE \
+  pixelColor_t { .as_uint16 = 63489 }
+#define MAGENTA \
+  pixelColor_t { .as_uint16 = 63551 }
+#define WHITE \
+  pixelColor_t { .as_uint16 = 65535 }
+#define OFF \
+  pixelColor_t { .as_uint16 = 1 }
 
 // Dim the specified color. Brightness is 0-255 (0=off, 255=don't dim at
 // all-keep original color).
