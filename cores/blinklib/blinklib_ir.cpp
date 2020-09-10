@@ -176,10 +176,10 @@ void ReceiveFaceData() {
           }
         }
       }
-    }
 
-    // No matter what, mark buffer as read so we can get next packet
-    ir_rx_state->packetBufferReady = 0;
+      // No matter what, mark buffer as read so we can get next packet
+      ir_rx_state->packetBufferReady = 0;
+    }
 
     // Increment our pointers.
     face_data++;
