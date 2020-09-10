@@ -268,7 +268,8 @@ const byte *getDatagramOnFace(byte face) {
 
 void markDatagramReadOnFace(byte face) { face_data_[face].inDatagramLen = 0; }
 
-bool sendDatagramOnFace(const void *data, byte len, byte face) {
+bool __attribute__((noinline))
+sendDatagramOnFace(const void *data, byte len, byte face) {
   if (len > IR_DATAGRAM_LEN) return false;
 
   FaceData *face_data = &face_data_[face];
