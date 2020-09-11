@@ -91,7 +91,7 @@ Color lighten(Color color, byte brightness) {
 Color __attribute__((noinline)) makeColorRGB(byte red, byte green, byte blue) {
   // Internal color representation is only 5 bits, so we have to divide down
   // from 8 bits
-  return {1, (byte)(red >> 3), (byte)(green >> 3), (byte)(blue >> 3)};
+  return {0, (byte)(red >> 3), (byte)(green >> 3), (byte)(blue >> 3)};
 }
 
 Color makeColorHSB(byte hue, byte saturation, byte brightness) {
