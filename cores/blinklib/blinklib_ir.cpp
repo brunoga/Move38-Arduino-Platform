@@ -94,6 +94,10 @@ void MaybeEnableSendPostponeWarmSleep() {
   }
 }
 
+static bool valid_data_received(volatile ir_rx_state_t *ir_rx_state) {
+  return ir_rx_state->packetBuffer[0] != IR_USER_DATA_HEADER_BYTE;
+}
+
 void ReceiveFaceData() {
   //  Use these pointers to step though the arrays
   FaceData *face_data = face_data_;
@@ -103,26 +107,22 @@ void ReceiveFaceData() {
     // Check for anything new coming in...
 
     if (ir_rx_state->packetBufferReady) {
-      // Got something, so we know there is someone out there
-      // TODO: Should we require the received packet to pass error checks?
-      face_data->expireTime.set(RX_EXPIRE_TIME_MS);
+      // Some data is available.
 
-      // This is slightly ugly. To save a buffer, we get the full packet with
-      // the BlinkBIOS IR packet type byte.
-
-      volatile const uint8_t *packetData = (ir_rx_state->packetBuffer);
-
-      if (*packetData++ ==
-          IR_USER_DATA_HEADER_BYTE) {  // We only process user data and ignore
-                                       // (and consume) anything else. This is
-                                       // ugly. Sorry.
-
-        uint8_t packetDataLen = (ir_rx_state->packetBufferLen) -
-                                1;  // deduct the BlinkBIOS packet type  byte
+      if (valid_data_received(ir_rx_state)) {
+        // Got something that looks valid, so we know there is someone out
+        // there.
+        face_data->expireTime.set(RX_EXPIRE_TIME_MS);
 
         // Clear to send on this face immediately to ping-pong
         // messages at max speed without collisions
         face_data->sendTime.set(0);
+
+        // packetData points just after the BlinkBIOS packet type byte.
+        volatile const uint8_t *packetData = (&ir_rx_state->packetBuffer[1]);
+
+        uint8_t packetDataLen = (ir_rx_state->packetBufferLen) -
+                                1;  // deduct the BlinkBIOS packet type byte.
 
         // Save face value.
         face_data->inValue = packetData[0];
