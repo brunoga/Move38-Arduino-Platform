@@ -1,5 +1,6 @@
 #include <avr/interrupt.h>
 
+#include "blinklib_ir_internal.h"
 #include "blinklib_led_internal.h"
 #include "blinklib_timer.h"
 #include "blinklib_warm_sleep_internal.h"
@@ -91,7 +92,7 @@ void Enter() {
       // while ( blinkbios_is_rx_in_progress( f ) );     // Wait to clear to
       // send (no guarantee, but better than just blink sending)
 
-      BLINKBIOS_IRDATA_SEND_PACKET_VECTOR(f, force_sleep_packet, 2);
+      blinklib::ir::internal::Send(f, force_sleep_packet, 2);
     }
   }
 
@@ -198,7 +199,7 @@ void Enter() {
       fade_brightness += animation_fade_step;
       blinklib::led::internal::SetColorNow(dim(WHITE, fade_brightness));
 
-      BLINKBIOS_IRDATA_SEND_PACKET_VECTOR(f, nop_wake_packet, 2);
+      blinklib::ir::internal::Send(f, nop_wake_packet, 2);
     }
   }
 

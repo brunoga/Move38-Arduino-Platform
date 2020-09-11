@@ -31,6 +31,8 @@
 #error IR_DATAGRAM_LEN must not be bigger than IR_RX_PACKET_SIZE
 #endif
 
+//#define BGA_BLINKLIB_ENABLE_CHECKSUM
+
 namespace blinklib {
 
 namespace ir {
@@ -80,6 +82,19 @@ static Timer send_postpone_warm_sleep_timer_;  // Set each time we send a viral
                                                // button press to avoid sending
                                                // getting into a circular loop.
 
+#ifdef BGA_BLINKLIB_ENABLE_CHECKSUM
+static byte __attribute__((noinline))
+compute_checksum(const byte *data, byte len) {
+  byte checksum = 0;
+  for (byte i = 0; i < len; ++i) {
+    checksum = (checksum >> 1) + ((checksum & 1) << 7);
+    checksum = (checksum + data[i]);
+  }
+
+  return checksum;
+}
+#endif
+
 // Called anytime a the button is pressed or anytime we get a viral button press
 // form a neighbor over IR Note that we know that this can not become cyclical
 // because of the lockout delay.
@@ -95,7 +110,27 @@ void MaybeEnableSendPostponeWarmSleep() {
 }
 
 static bool valid_data_received(volatile ir_rx_state_t *ir_rx_state) {
-  return ir_rx_state->packetBuffer[0] != IR_USER_DATA_HEADER_BYTE;
+#ifdef BGA_BLINKLIB_ENABLE_CHECKSUM
+  if (ir_rx_state->packetBuffer[0] != IR_USER_DATA_HEADER_BYTE) return false;
+
+  return (compute_checksum((const byte *)&ir_rx_state->packetBuffer[1],
+                           ir_rx_state->packetBufferLen - 2) ==
+          ir_rx_state->packetBuffer[ir_rx_state->packetBufferLen - 1]);
+#else
+  return ir_rx_state->packetBuffer[0] == IR_USER_DATA_HEADER_BYTE;
+#endif
+}
+
+bool Send(byte face, const byte *data, byte len) {
+#ifdef BGA_BLINKLIB_ENABLE_CHECKSUM
+  byte buffer[len + 1];
+  memcpy(buffer, data, len);
+  buffer[len] = compute_checksum(buffer, len);
+
+  return BLINKBIOS_IRDATA_SEND_PACKET_VECTOR(face, buffer, len + 1);
+#else
+  return BLINKBIOS_IRDATA_SEND_PACKET_VECTOR(face, data, len);
+#endif
 }
 
 void ReceiveFaceData() {
@@ -121,9 +156,14 @@ void ReceiveFaceData() {
         // packetData points just after the BlinkBIOS packet type byte.
         volatile const uint8_t *packetData = (&ir_rx_state->packetBuffer[1]);
 
+#ifdef BGA_BLINKLIB_ENABLE_CHECKSUM
+        uint8_t packetDataLen =
+            (ir_rx_state->packetBufferLen) -
+            2;  // deduct the BlinkBIOS packet type byte and checksum.
+#else
         uint8_t packetDataLen = (ir_rx_state->packetBufferLen) -
                                 1;  // deduct the BlinkBIOS packet type byte.
-
+#endif
         // Save face value.
         face_data->inValue = packetData[0];
 
@@ -159,7 +199,9 @@ void ReceiveFaceData() {
                 // Looks like a new one. Record it and start sending acks for
                 // it.
                 face_data->header.ack_sequence = incoming_header.sequence;
-                face_data->inDatagramLen = packetDataLen - 2;
+                face_data->inDatagramLen =
+                    packetDataLen -
+                    2;  // Subtract face value byte and header byte.
                 memcpy(&face_data->inDatagramData, (const void *)&packetData[2],
                        face_data->inDatagramLen);
               } else {
@@ -211,8 +253,7 @@ void SendFaceData() {
       // Ok, it is time to send something on this face.
 
       // Send packet.
-      if (BLINKBIOS_IRDATA_SEND_PACKET_VECTOR(
-              f, (const byte *)&face_data->outValue, outgoingPacketLen)) {
+      if (Send(f, (const byte *)&face_data->outValue, outgoingPacketLen)) {
         face_data->send_header = false;
         face_data->header.postpone_sleep = false;
       }
