@@ -1,5 +1,3 @@
-#include "blinklib_settings.h"
-
 #ifdef BGA_CUSTOM_BLINKLIB_DISABLE_DATAGRAM
 
 #include <string.h>
@@ -73,6 +71,10 @@ static FaceData face_data_[FACE_COUNT];
 static Timer send_postpone_warm_sleep_timer_;  // Set each time we send a viral
                                                // button press to avoid sending
                                                // getting into a circular loop.
+
+bool Send(byte face, const byte *data, byte len) {
+  return BLINKBIOS_IRDATA_SEND_PACKET_VECTOR(face, data, len);
+}
 
 // Called anytime a the button is pressed or anytime we get a viral button press
 // form a neighbor over IR Note that we know that this can not become cyclical

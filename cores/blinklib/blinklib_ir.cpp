@@ -1,5 +1,3 @@
-#include "blinklib_settings.h"
-
 #ifndef BGA_CUSTOM_BLINKLIB_DISABLE_DATAGRAM
 
 #include <string.h>
@@ -30,8 +28,6 @@
 #if IR_DATAGRAM_LEN > IR_RX_PACKET_SIZE
 #error IR_DATAGRAM_LEN must not be bigger than IR_RX_PACKET_SIZE
 #endif
-
-//#define BGA_BLINKLIB_ENABLE_CHECKSUM
 
 namespace blinklib {
 
@@ -82,7 +78,7 @@ static Timer send_postpone_warm_sleep_timer_;  // Set each time we send a viral
                                                // button press to avoid sending
                                                // getting into a circular loop.
 
-#ifdef BGA_BLINKLIB_ENABLE_CHECKSUM
+#ifdef BGA_CUSTOM_BLINKLIB_ENABLE_CHECKSUM
 static byte __attribute__((noinline))
 compute_checksum(const byte *data, byte len) {
   byte checksum = 0;
@@ -110,7 +106,7 @@ void MaybeEnableSendPostponeWarmSleep() {
 }
 
 static bool valid_data_received(volatile ir_rx_state_t *ir_rx_state) {
-#ifdef BGA_BLINKLIB_ENABLE_CHECKSUM
+#ifdef BGA_CUSTOM_BLINKLIB_ENABLE_CHECKSUM
   if (ir_rx_state->packetBuffer[0] != IR_USER_DATA_HEADER_BYTE) return false;
 
   return (compute_checksum((const byte *)&ir_rx_state->packetBuffer[1],
@@ -122,7 +118,7 @@ static bool valid_data_received(volatile ir_rx_state_t *ir_rx_state) {
 }
 
 bool Send(byte face, const byte *data, byte len) {
-#ifdef BGA_BLINKLIB_ENABLE_CHECKSUM
+#ifdef BGA_CUSTOM_BLINKLIB_ENABLE_CHECKSUM
   byte buffer[len + 1];
   memcpy(buffer, data, len);
   buffer[len] = compute_checksum(buffer, len);
@@ -156,7 +152,7 @@ void ReceiveFaceData() {
         // packetData points just after the BlinkBIOS packet type byte.
         volatile const uint8_t *packetData = (&ir_rx_state->packetBuffer[1]);
 
-#ifdef BGA_BLINKLIB_ENABLE_CHECKSUM
+#ifdef BGA_CUSTOM_BLINKLIB_ENABLE_CHECKSUM
         uint8_t packetDataLen =
             (ir_rx_state->packetBufferLen) -
             2;  // deduct the BlinkBIOS packet type byte and checksum.
