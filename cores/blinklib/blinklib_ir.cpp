@@ -1,9 +1,10 @@
 #ifndef BGA_CUSTOM_BLINKLIB_DISABLE_DATAGRAM
 
+#include "blinklib_ir.h"
+
 #include <string.h>
 
 #include "blinklib_common.h"
-#include "blinklib_ir.h"
 #include "blinklib_ir_internal.h"
 #include "blinklib_time_internal.h"
 #include "blinklib_timer.h"
@@ -52,22 +53,22 @@ union Header {
 };
 
 struct FaceData {
-  byte inValue;  // Last received value on this face, or 0 if no neighbor
-                 // ever seen since startup
-  byte inDatagramData[IR_DATAGRAM_LEN];
-  byte inDatagramLen;  // 0= No datagram waiting to be read
+  byte in_value;  // Last received value on this face, or 0 if no neighbor
+                  // ever seen since startup
+  byte in_datagram[IR_DATAGRAM_LEN];
+  byte in_datagram_len;  // 0= No datagram waiting to be read
 
-  Timer expireTime;  // When this face will be considered to be expired (no
-                     // neighbor there)
+  Timer expire_time;  // When this face will be considered to be expired (no
+                      // neighbor there)
 
-  byte outValue;  // Value we send out on this face
+  byte out_value;  // Value we send out on this face
   Header header;
-  byte outDatagramData[IR_DATAGRAM_LEN];
-  byte outDatagramLen;  // 0= No datagram waiting to be sent
+  byte out_datagram[IR_DATAGRAM_LEN];
+  byte out_datagram_len;  // 0= No datagram waiting to be sent
 
   Timer
-      sendTime;  // Next time we will transmit on this face (set to 0 every time
-                 // we get a good message so we ping-pong across the link)
+      send_time;  // Next time we will transmit on this face (set to 0 every
+                  // time we get a good message so we ping-pong across the link)
 
   bool send_header;
 };
@@ -143,11 +144,11 @@ void ReceiveFaceData() {
       if (valid_data_received(ir_rx_state)) {
         // Got something that looks valid, so we know there is someone out
         // there.
-        face_data->expireTime.set(RX_EXPIRE_TIME_MS);
+        face_data->expire_time.set(RX_EXPIRE_TIME_MS);
 
         // Clear to send on this face immediately to ping-pong
         // messages at max speed without collisions
-        face_data->sendTime.set(0);
+        face_data->send_time.set(0);
 
         // packetData points just after the BlinkBIOS packet type byte.
         volatile const uint8_t *packetData = (&ir_rx_state->packetBuffer[1]);
@@ -161,7 +162,7 @@ void ReceiveFaceData() {
                                 1;  // deduct the BlinkBIOS packet type byte.
 #endif
         // Save face value.
-        face_data->inValue = packetData[0];
+        face_data->in_value = packetData[0];
 
         if (packetDataLen > 1) {
           // Guaranteed delivery: Parse incoming header.
@@ -186,7 +187,7 @@ void ReceiveFaceData() {
             if (incoming_header.ack_sequence == face_data->header.sequence) {
               // We received an ack for the datagram we were sending. Mark it as
               // delivered.
-              face_data->outDatagramLen = 0;
+              face_data->out_datagram_len = 0;
             }
 
             if (packetDataLen > 2) {
@@ -195,11 +196,11 @@ void ReceiveFaceData() {
                 // Looks like a new one. Record it and start sending acks for
                 // it.
                 face_data->header.ack_sequence = incoming_header.sequence;
-                face_data->inDatagramLen =
+                face_data->in_datagram_len =
                     packetDataLen -
                     2;  // Subtract face value byte and header byte.
-                memcpy(&face_data->inDatagramData, (const void *)&packetData[2],
-                       face_data->inDatagramLen);
+                memcpy(&face_data->in_datagram, (const void *)&packetData[2],
+                       face_data->in_datagram_len);
               } else {
                 // Resend. Just ignore it and continue sending ack.
                 face_data->send_header = true;
@@ -232,7 +233,7 @@ void SendFaceData() {
   FOREACH_FACE(f) {
     // Send one out too if it is time....
 
-    if (face_data->sendTime.isExpired()) {  // Time to send on this face?
+    if (face_data->send_time.isExpired()) {  // Time to send on this face?
       // Note that we do not use the rx_fresh flag here because we want the
       // timeout to do automatic retries to kickstart things when a new
       // neighbor shows up or when an IR message gets missed
@@ -243,13 +244,13 @@ void SendFaceData() {
       byte outgoingPacketLen =
           1 +
           (face_data->send_header || face_data->header.postpone_sleep ||
-           (face_data->outDatagramLen != 0)) +
-          face_data->outDatagramLen;
+           (face_data->out_datagram_len != 0)) +
+          face_data->out_datagram_len;
 
       // Ok, it is time to send something on this face.
 
       // Send packet.
-      if (Send(f, (const byte *)&face_data->outValue, outgoingPacketLen)) {
+      if (Send(f, (const byte *)&face_data->out_value, outgoingPacketLen)) {
         face_data->send_header = false;
         face_data->header.postpone_sleep = false;
       }
@@ -271,8 +272,9 @@ void SendFaceData() {
       // Note we are using the "real" time here to offset the actual time it
       // takes to send the datagram (16 byte datagrams take up to 65 ms to
       // transmit currently).
-      face_data->sendTime.set(blinklib::time::internal::currentMillis() -
-                              blinklib::time::internal::now + TX_PROBE_TIME_MS);
+      face_data->send_time.set(blinklib::time::internal::currentMillis() -
+                               blinklib::time::internal::now +
+                               TX_PROBE_TIME_MS);
     }
     face_data++;
   }
@@ -288,7 +290,7 @@ using blinklib::ir::internal::face_data_;
 using blinklib::ir::internal::FaceData;
 
 byte getDatagramLengthOnFace(byte face) {
-  return face_data_[face].inDatagramLen;
+  return face_data_[face].in_datagram_len;
 }
 
 bool isDatagramReadyOnFace(byte face) {
@@ -296,14 +298,14 @@ bool isDatagramReadyOnFace(byte face) {
 }
 
 bool isDatagramPendingOnFace(byte face) {
-  return face_data_[face].outDatagramLen != 0;
+  return face_data_[face].out_datagram_len != 0;
 }
 
 const byte *getDatagramOnFace(byte face) {
-  return face_data_[face].inDatagramData;
+  return face_data_[face].in_datagram;
 }
 
-void markDatagramReadOnFace(byte face) { face_data_[face].inDatagramLen = 0; }
+void markDatagramReadOnFace(byte face) { face_data_[face].in_datagram_len = 0; }
 
 bool __attribute__((noinline))
 sendDatagramOnFace(const void *data, byte len, byte face) {
@@ -311,18 +313,18 @@ sendDatagramOnFace(const void *data, byte len, byte face) {
 
   FaceData *face_data = &face_data_[face];
 
-  if (face_data->outDatagramLen != 0) return false;
+  if (face_data->out_datagram_len != 0) return false;
 
   // Guaranteed delivery: Increment sequence number.
   face_data->header.sequence = (face_data->header.sequence % 7) + 1;
 
-  face_data->outDatagramLen = len;
-  memcpy(face_data->outDatagramData, data, len);
+  face_data->out_datagram_len = len;
+  memcpy(face_data->out_datagram, data, len);
 
   return true;
 }
 
-byte getLastValueReceivedOnFace(byte face) { return face_data_[face].inValue; }
+byte getLastValueReceivedOnFace(byte face) { return face_data_[face].in_value; }
 
 bool didValueOnFaceChange(byte face) {
   static byte prev_state[FACE_COUNT];
@@ -339,7 +341,7 @@ bool didValueOnFaceChange(byte face) {
 }
 
 bool __attribute__((noinline)) isValueReceivedOnFaceExpired(byte face) {
-  return face_data_[face].expireTime.isExpired();
+  return face_data_[face].expire_time.isExpired();
 }
 
 bool isAlone() {
@@ -352,11 +354,11 @@ bool isAlone() {
 }
 
 void setValueSentOnAllFaces(byte value) {
-  FOREACH_FACE(face) { face_data_[face].outValue = value; }
+  FOREACH_FACE(face) { face_data_[face].out_value = value; }
 }
 
 void setValueSentOnFace(byte value, byte face) {
-  face_data_[face].outValue = value;
+  face_data_[face].out_value = value;
 }
 
 #endif
