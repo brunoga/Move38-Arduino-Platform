@@ -307,7 +307,7 @@ const byte *getDatagramOnFace(byte face) {
   return face_data_[face].in_datagram;
 }
 
-void markDatagramReadOnFace(byte face) {}
+void markDatagramReadOnFace(byte face) { (void)face; }
 
 bool __attribute__((noinline))
 sendDatagramOnFace(const void *data, byte len, byte face) {
