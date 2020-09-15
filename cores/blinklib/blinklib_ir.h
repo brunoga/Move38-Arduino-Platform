@@ -45,10 +45,11 @@ bool isDatagramReadyOnFace(byte face);
 // Returns true is a datagram is pending to be sent on the given face.
 bool isDatagramPendingOnFace(byte face);
 
-// Returns a pointer to the actual received datagram data.
+// Returns a pointer to the actual received datagram data and resets the length
+// of the data in the buffer to 0.
 const byte *getDatagramOnFace(byte face);
 
-// Frees up the buffer holding the datagram data.
+// DEPRECATED: This is currently a no-op.
 void markDatagramReadOnFace(byte face);
 
 // Send a datagram.

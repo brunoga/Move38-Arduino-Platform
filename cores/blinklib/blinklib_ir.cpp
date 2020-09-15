@@ -302,10 +302,12 @@ bool isDatagramPendingOnFace(byte face) {
 }
 
 const byte *getDatagramOnFace(byte face) {
+  face_data_[face].in_datagram_len = 0;
+
   return face_data_[face].in_datagram;
 }
 
-void markDatagramReadOnFace(byte face) { face_data_[face].in_datagram_len = 0; }
+void markDatagramReadOnFace(byte face) {}
 
 bool __attribute__((noinline))
 sendDatagramOnFace(const void *data, byte len, byte face) {
