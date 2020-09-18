@@ -301,6 +301,10 @@ bool isDatagramPendingOnFace(byte face) {
   return face_data_[face].out_datagram_len != 0;
 }
 
+void resetPendingDatagramOnFace(byte face) {
+  face_data_[face].out_datagram_len = 0;
+}
+
 const byte *getDatagramOnFace(byte face) {
   face_data_[face].in_datagram_len = 0;
 

@@ -45,6 +45,10 @@ bool isDatagramReadyOnFace(byte face);
 // Returns true is a datagram is pending to be sent on the given face.
 bool isDatagramPendingOnFace(byte face);
 
+// If a datagram is pending to be sent on a given face, this will reset it and
+// it will not be delivered anymore.
+void resetPendingDatagramOnFace(byte face);
+
 // Returns a pointer to the actual received datagram data and resets the length
 // of the data in the buffer to 0.
 const byte *getDatagramOnFace(byte face);
