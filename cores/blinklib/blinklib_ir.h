@@ -7,9 +7,6 @@
 // IR_DATA_VALUE_MAX.
 #define IR_DATA_VALUE_MAX 255
 
-// Must be smaller than IR_RX_PACKET_SIZE.
-#define IR_DATAGRAM_LEN 16
-
 // Returns the last received value on the indicated face. Between 0 and
 // IR_DATA_VALUE_MAX inclusive. Returns 0 if no neighbor was ever seen on this
 // face since power-up so best to only use after checking if face is not expired
@@ -35,6 +32,10 @@ void setValueSentOnFace(byte value, byte face);
 // Same as setValueSentOnFace(), but sets all faces in one call.
 void setValueSentOnAllFaces(byte value);
 
+#ifndef BGA_CUSTOM_BLINKLIB_DISABLE_DATAGRAM
+// Must be smaller than IR_RX_PACKET_SIZE.
+#define IR_DATAGRAM_LEN 16
+
 // Returns the number of bytes waiting in the data buffer, or 0 if no datagram
 // is ready.
 byte getDatagramLengthOnFace(byte face);
@@ -58,5 +59,6 @@ void markDatagramReadOnFace(byte face);
 
 // Send a datagram.
 bool sendDatagramOnFace(const void *data, byte len, byte face);
+#endif
 
 #endif

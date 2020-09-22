@@ -1,5 +1,3 @@
-#ifndef BGA_CUSTOM_BLINKLIB_DISABLE_DATAGRAM
-
 #include "blinklib_ir.h"
 
 #include <string.h>
@@ -26,8 +24,10 @@
         // ignored since insures that a single press can not circulate around
         // indefinitely.
 
+#ifndef BGA_CUSTOM_BLINKLIB_DISABLE_DATAGRAM
 #if IR_DATAGRAM_LEN > IR_RX_PACKET_SIZE
 #error IR_DATAGRAM_LEN must not be bigger than IR_RX_PACKET_SIZE
+#endif
 #endif
 
 namespace blinklib {
@@ -55,22 +55,29 @@ union Header {
 struct FaceData {
   byte in_value;  // Last received value on this face, or 0 if no neighbor
                   // ever seen since startup
+
+#ifndef BGA_CUSTOM_BLINKLIB_DISABLE_DATAGRAM
   byte in_datagram[IR_DATAGRAM_LEN];
   byte in_datagram_len;  // 0= No datagram waiting to be read
+#endif
 
   Timer expire_time;  // When this face will be considered to be expired (no
                       // neighbor there)
 
   byte out_value;  // Value we send out on this face
   Header header;
+#ifndef BGA_CUSTOM_BLINKLIB_DISABLE_DATAGRAM
   byte out_datagram[IR_DATAGRAM_LEN];
   byte out_datagram_len;  // 0= No datagram waiting to be sent
+#endif
 
   Timer
       send_time;  // Next time we will transmit on this face (set to 0 every
                   // time we get a good message so we ping-pong across the link)
+#ifndef BGA_CUSTOM_BLINKLIB_DISABLE_DATAGRAM
 
   bool send_header;
+#endif
 };
 
 static FaceData face_data_[FACE_COUNT];
@@ -79,6 +86,7 @@ static Timer send_postpone_warm_sleep_timer_;  // Set each time we send a viral
                                                // button press to avoid sending
                                                // getting into a circular loop.
 
+#ifndef BGA_CUSTOM_BLINKLIB_DISABLE_DATAGRAM
 #ifdef BGA_CUSTOM_BLINKLIB_ENABLE_CHECKSUM
 static byte __attribute__((noinline))
 compute_checksum(const byte *data, byte len) {
@@ -90,6 +98,7 @@ compute_checksum(const byte *data, byte len) {
 
   return checksum;
 }
+#endif
 #endif
 
 // Called anytime a the button is pressed or anytime we get a viral button press
@@ -184,6 +193,7 @@ void ReceiveFaceData() {
               BLINKBIOS_POSTPONE_SLEEP_VECTOR();
             }
 
+#ifndef BGA_CUSTOM_BLINKLIB_DISABLE_DATAGRAM
             if (incoming_header.ack_sequence == face_data->header.sequence) {
               // We received an ack for the datagram we were sending. Mark it as
               // delivered.
@@ -206,6 +216,7 @@ void ReceiveFaceData() {
                 face_data->send_header = true;
               }
             }
+#endif
           } else {
             // Special packet.
             if (packetData[0] == TRIGGER_WARM_SLEEP_SPECIAL_VALUE &&
@@ -241,17 +252,22 @@ void SendFaceData() {
       face_data->header.non_special = true;
 
       // Total length of the outgoing packet. Face value + header + datagram.
+#ifndef BGA_CUSTOM_BLINKLIB_DISABLE_DATAGRAM
       byte outgoingPacketLen =
           1 +
           (face_data->send_header || face_data->header.postpone_sleep ||
            (face_data->out_datagram_len != 0)) +
           face_data->out_datagram_len;
-
+#else
+      byte outgoingPacketLen = 1 + face_data->header.postpone_sleep;
+#endif
       // Ok, it is time to send something on this face.
 
       // Send packet.
       if (Send(f, (const byte *)&face_data->out_value, outgoingPacketLen)) {
+#ifndef BGA_CUSTOM_BLINKLIB_DISABLE_DATAGRAM
         face_data->send_header = false;
+#endif
         face_data->header.postpone_sleep = false;
       }
 
@@ -289,6 +305,7 @@ void SendFaceData() {
 using blinklib::ir::internal::face_data_;
 using blinklib::ir::internal::FaceData;
 
+#ifndef BGA_CUSTOM_BLINKLIB_DISABLE_DATAGRAM
 byte getDatagramLengthOnFace(byte face) {
   return face_data_[face].in_datagram_len;
 }
@@ -329,6 +346,7 @@ sendDatagramOnFace(const void *data, byte len, byte face) {
 
   return true;
 }
+#endif
 
 byte getLastValueReceivedOnFace(byte face) { return face_data_[face].in_value; }
 
@@ -366,5 +384,3 @@ void setValueSentOnAllFaces(byte value) {
 void setValueSentOnFace(byte value, byte face) {
   face_data_[face].out_value = value;
 }
-
-#endif
