@@ -322,7 +322,7 @@ sendDatagramOnFace(const void *data, byte len, byte face) {
   if (face_data->out_datagram_len != 0) return false;
 
   // Guaranteed delivery: Increment sequence number.
-  face_data->header.sequence = (face_data->header.sequence % 7) + 1;
+  face_data->header.sequence = face_data->header.sequence + 1;
 
   face_data->out_datagram_len = len;
   memcpy(face_data->out_datagram, data, len);
