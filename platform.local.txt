@@ -1,17 +1,9 @@
-# Custom configuration options for BGA's Custom Blinklib.
+# Allow importing files directly from a config folder in the sketch directory.
+# This allow per project configuration (for projects that are aware of this,
+# that is). Used mostly to setting defines during compilation.
+#
+# Note that this seem to only work if added as extra flags. Adding them
+# directly to flags in platform.txt did not work.
 
-# Note that you can have only one "compiler.cpp.extra_flags" line so if you want
-# to enable/disable multiple features in the future (currently it does not make
-# sense with the options available), just add all defines to a single line. For
-# example: "compiler.cpp.extra_flags=-DXXX -DYYY -DZZZ".
-
-# Uncomment the line below to fully disable datagram support (saving over 100
-# bytes of storage).
-#compiler.cpp.extra_flags=-DBGA_CUSTOM_BLINKLIB_DISABLE_DATAGRAM
-
-# Uncomment the line below to enable data checksum on IR transmissions. This is
-# on top of what BlinkBIOS already does and does not look like it is really
-# useful. It is here fore for experimenting than anything else. Takes around
-# 200 bytes of storage when enabled.
-#compiler.cpp.extra_flags=-DBGA_CUSTOM_BLINKLIB_ENABLE_CHECKSUM
-
+compiler.c.extra_flags=-I{build.path}/sketch/config
+compiler.cpp.extra_flags=-I{build.path}/sketch/config

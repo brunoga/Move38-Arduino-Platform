@@ -3,6 +3,10 @@
 
 #include "blinklib_common.h"
 
+#if __has_include(<blinklib_config.h>)
+#include <blinklib_config.h>
+#endif
+
 // The value of the data sent and received on faces via IR can be between 0 and
 // IR_DATA_VALUE_MAX.
 #define IR_DATA_VALUE_MAX 255
