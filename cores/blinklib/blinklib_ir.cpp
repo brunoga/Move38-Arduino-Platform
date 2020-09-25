@@ -152,12 +152,12 @@ void ReceiveFaceData() {
   FaceData *face_data = face_data_;
   volatile ir_rx_state_t *ir_rx_state = blinkbios_irdata_block.ir_rx_states;
 
-#ifdef BGA_CUSTOM_BLINKLIB_TRACK_FACE_CONNECTION
-  bool was_connected = face_data->connected;
-#endif
-
   FOREACH_FACE(f) {
     // Check for anything new coming in...
+
+#ifdef BGA_CUSTOM_BLINKLIB_TRACK_FACE_CONNECTION
+    bool was_connected = face_data->connected;
+#endif
 
     if (ir_rx_state->packetBufferReady) {
       // Some data is available.
@@ -167,6 +167,7 @@ void ReceiveFaceData() {
         // there.
 #ifdef BGA_CUSTOM_BLINKLIB_TRACK_FACE_CONNECTION
         if (!was_connected) {
+          face_data->connected = true;
           MaybeEnableSendPostponeWarmSleep();
         }
 #endif
