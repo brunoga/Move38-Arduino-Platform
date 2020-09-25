@@ -78,6 +78,10 @@ struct FaceData {
 
   bool send_header;
 #endif
+
+#ifdef BGA_CUSTOM_BLINKLIB_TRACK_FACE_CONNECTION
+  bool connected;  // True if the face is currently connected.
+#endif
 };
 
 static FaceData face_data_[FACE_COUNT];
@@ -112,6 +116,10 @@ void MaybeEnableSendPostponeWarmSleep() {
 
     // Prevent warm sleep
     blinklib::warm_sleep::internal::ResetTimer();
+
+    // We also need to extend hardware sleep since we may not have got a
+    // physical button press.
+    BLINKBIOS_POSTPONE_SLEEP_VECTOR();
   }
 }
 
@@ -144,6 +152,10 @@ void ReceiveFaceData() {
   FaceData *face_data = face_data_;
   volatile ir_rx_state_t *ir_rx_state = blinkbios_irdata_block.ir_rx_states;
 
+#ifdef BGA_CUSTOM_BLINKLIB_TRACK_FACE_CONNECTION
+  bool was_connected = face_data->connected;
+#endif
+
   FOREACH_FACE(f) {
     // Check for anything new coming in...
 
@@ -153,6 +165,12 @@ void ReceiveFaceData() {
       if (valid_data_received(ir_rx_state)) {
         // Got something that looks valid, so we know there is someone out
         // there.
+#ifdef BGA_CUSTOM_BLINKLIB_TRACK_FACE_CONNECTION
+        if (!was_connected) {
+          MaybeEnableSendPostponeWarmSleep();
+        }
+#endif
+
         face_data->expire_time.set(RX_EXPIRE_TIME_MS);
 
         // Clear to send on this face immediately to ping-pong
@@ -185,12 +203,7 @@ void ReceiveFaceData() {
               // The blink on on the other side of this connection
               // is telling us that a button was pressed recently
               // Send the viral message to all neighbors.
-
               MaybeEnableSendPostponeWarmSleep();
-
-              // We also need to extend hardware sleep
-              // since we did not get a physical button press
-              BLINKBIOS_POSTPONE_SLEEP_VECTOR();
             }
 
 #ifndef BGA_CUSTOM_BLINKLIB_DISABLE_DATAGRAM
@@ -230,6 +243,13 @@ void ReceiveFaceData() {
       // No matter what, mark buffer as read so we can get next packet
       ir_rx_state->packetBufferReady = 0;
     }
+
+#ifdef BGA_CUSTOM_BLINKLIB_TRACK_FACE_CONNECTION
+    if (was_connected && face_data->expire_time.isExpired()) {
+      face_data->connected = false;
+      MaybeEnableSendPostponeWarmSleep();
+    }
+#endif
 
     // Increment our pointers.
     face_data++;
