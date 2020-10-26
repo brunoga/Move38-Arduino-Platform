@@ -17,6 +17,11 @@ typedef pixelColor_t Color;
 // to get the performance and size benefits of static compilation
 // Shame no way to do this right in C/C++
 
+#define MAKECOLOR_5BIT_RGB(r, g, b) \
+  pixelColor_t {                    \
+    { 1, r, g, b }                  \
+  }
+
 #define RED \
   pixelColor_t { .as_uint16 = 63 }
 #define ORANGE \
