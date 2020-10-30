@@ -50,6 +50,9 @@ bool isDatagramReadyOnFace(byte face);
 // Returns true is a datagram is pending to be sent on the given face.
 bool isDatagramPendingOnFace(byte face);
 
+// Returns true is a datagram is pending to be sent on any face.
+bool isDatagramPendingOnAnyFace();
+
 // If a datagram is pending to be sent on a given face, this will reset it and
 // it will not be delivered anymore.
 void resetPendingDatagramOnFace(byte face);

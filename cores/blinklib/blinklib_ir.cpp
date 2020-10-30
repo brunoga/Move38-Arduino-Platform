@@ -339,6 +339,14 @@ bool isDatagramPendingOnFace(byte face) {
   return face_data_[face].out_datagram_len != 0;
 }
 
+bool isDatagramPendingOnAnyFace() {
+  FOREACH_FACE(face) {
+    if (isDatagramPendingOnFace(face)) return true;
+  }
+
+  return false;
+}
+
 void resetPendingDatagramOnFace(byte face) {
   face_data_[face].out_datagram_len = 0;
 }
