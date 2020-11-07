@@ -53,8 +53,9 @@ union Header {
 };
 
 struct FaceData {
-  byte in_value;  // Last received value on this face, or 0 if no neighbor
-                  // ever seen since startup
+  BGA_CUSTOM_BLINKLIB_FACE_VALUE_TYPE
+  in_value;  // Last received value on this face, or 0 if no neighbor
+             // ever seen since startup
 
 #ifndef BGA_CUSTOM_BLINKLIB_DISABLE_DATAGRAM
   byte in_datagram[IR_DATAGRAM_LEN];
@@ -64,7 +65,8 @@ struct FaceData {
   Timer expire_time;  // When this face will be considered to be expired (no
                       // neighbor there)
 
-  byte out_value;  // Value we send out on this face
+  BGA_CUSTOM_BLINKLIB_FACE_VALUE_TYPE
+  out_value;  // Value we send out on this face
   Header header;
 #ifndef BGA_CUSTOM_BLINKLIB_DISABLE_DATAGRAM
   byte out_datagram[IR_DATAGRAM_LEN];
@@ -105,7 +107,7 @@ compute_checksum(const byte *data, byte len) {
 #endif
 #endif
 
-// Called anytime a the button is pressed or anytime we get a viral button press
+// Called anytime the button is pressed or anytime we get a viral button press
 // form a neighbor over IR Note that we know that this can not become cyclical
 // because of the lockout delay.
 void MaybeEnableSendPostponeWarmSleep() {
@@ -190,12 +192,14 @@ void ReceiveFaceData() {
                                 1;  // deduct the BlinkBIOS packet type byte.
 #endif
         // Save face value.
-        face_data->in_value = packetData[0];
+        face_data->in_value =
+            *((BGA_CUSTOM_BLINKLIB_FACE_VALUE_TYPE *)packetData);
 
-        if (packetDataLen > 1) {
+        if (packetDataLen > sizeof(BGA_CUSTOM_BLINKLIB_FACE_VALUE_TYPE)) {
           // Guaranteed delivery: Parse incoming header.
           Header incoming_header;
-          incoming_header.as_byte = packetData[1];
+          incoming_header.as_byte =
+              packetData[sizeof(BGA_CUSTOM_BLINKLIB_FACE_VALUE_TYPE)];
 
           if (incoming_header.non_special) {
             // Normal datagram.
@@ -222,8 +226,13 @@ void ReceiveFaceData() {
                 face_data->header.ack_sequence = incoming_header.sequence;
                 face_data->in_datagram_len =
                     packetDataLen -
-                    2;  // Subtract face value byte and header byte.
-                memcpy(&face_data->in_datagram, (const void *)&packetData[2],
+                    (sizeof(BGA_CUSTOM_BLINKLIB_FACE_VALUE_TYPE) +
+                     1);  // Subtract face
+                          // value and
+                          // header byte.
+                memcpy(&face_data->in_datagram,
+                       (const void *)&packetData
+                           [sizeof(BGA_CUSTOM_BLINKLIB_FACE_VALUE_TYPE) + 1],
                        face_data->in_datagram_len);
               } else {
                 // Resend. Just ignore it and continue sending ack.
@@ -275,12 +284,13 @@ void SendFaceData() {
       // Total length of the outgoing packet. Face value + header + datagram.
 #ifndef BGA_CUSTOM_BLINKLIB_DISABLE_DATAGRAM
       byte outgoingPacketLen =
-          1 +
+          sizeof(BGA_CUSTOM_BLINKLIB_FACE_VALUE_TYPE) +
           (face_data->send_header || face_data->header.postpone_sleep ||
            (face_data->out_datagram_len != 0)) +
           face_data->out_datagram_len;
 #else
-      byte outgoingPacketLen = 1 + face_data->header.postpone_sleep;
+      byte outgoingPacketLen = sizeof(BGA_CUSTOM_BLINKLIB_FACE_VALUE_TYPE) +
+                               face_data->header.postpone_sleep;
 #endif
       // Ok, it is time to send something on this face.
 
@@ -377,12 +387,15 @@ sendDatagramOnFace(const void *data, byte len, byte face) {
 }
 #endif
 
-byte getLastValueReceivedOnFace(byte face) { return face_data_[face].in_value; }
+BGA_CUSTOM_BLINKLIB_FACE_VALUE_TYPE getLastValueReceivedOnFace(byte face) {
+  return face_data_[face].in_value;
+}
 
 bool didValueOnFaceChange(byte face) {
-  static byte prev_state[FACE_COUNT];
+  static BGA_CUSTOM_BLINKLIB_FACE_VALUE_TYPE prev_state[FACE_COUNT];
 
-  byte curr_state = getLastValueReceivedOnFace(face);
+  BGA_CUSTOM_BLINKLIB_FACE_VALUE_TYPE curr_state =
+      getLastValueReceivedOnFace(face);
 
   if (curr_state == prev_state[face]) {
     return false;
@@ -406,10 +419,10 @@ bool isAlone() {
   return true;
 }
 
-void setValueSentOnAllFaces(byte value) {
+void setValueSentOnAllFaces(BGA_CUSTOM_BLINKLIB_FACE_VALUE_TYPE value) {
   FOREACH_FACE(face) { face_data_[face].out_value = value; }
 }
 
-void setValueSentOnFace(byte value, byte face) {
+void setValueSentOnFace(BGA_CUSTOM_BLINKLIB_FACE_VALUE_TYPE value, byte face) {
   face_data_[face].out_value = value;
 }

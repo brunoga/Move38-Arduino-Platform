@@ -33,8 +33,9 @@ Timer timer_;
 // special cookie value Because it must be 2 long, this means that the cookie
 // can still be a data value since that value would only have a 1 byte packet
 
-static byte force_sleep_packet[2] = {TRIGGER_WARM_SLEEP_SPECIAL_VALUE,
-                                     TRIGGER_WARM_SLEEP_SPECIAL_VALUE};
+static byte force_sleep_packet[] = {TRIGGER_WARM_SLEEP_SPECIAL_VALUE,
+                                    TRIGGER_WARM_SLEEP_SPECIAL_VALUE,
+                                    TRIGGER_WARM_SLEEP_SPECIAL_VALUE};
 
 // This packet does nothing except wake up our neighbors
 
@@ -92,7 +93,8 @@ void Enter() {
       // while ( blinkbios_is_rx_in_progress( f ) );     // Wait to clear to
       // send (no guarantee, but better than just blink sending)
 
-      blinklib::ir::internal::Send(f, force_sleep_packet, 2);
+      blinklib::ir::internal::Send(f, force_sleep_packet,
+                                   sizeof(force_sleep_packet));
     }
   }
 
