@@ -33,13 +33,16 @@ Timer timer_;
 // special cookie value Because it must be 2 long, this means that the cookie
 // can still be a data value since that value would only have a 1 byte packet
 
-static byte force_sleep_packet[] = {TRIGGER_WARM_SLEEP_SPECIAL_VALUE,
-                                    TRIGGER_WARM_SLEEP_SPECIAL_VALUE,
-                                    TRIGGER_WARM_SLEEP_SPECIAL_VALUE};
+static byte force_sleep_packet[] = {
+    TRIGGER_WARM_SLEEP_SPECIAL_VALUE, TRIGGER_WARM_SLEEP_SPECIAL_VALUE,
+    TRIGGER_WARM_SLEEP_SPECIAL_VALUE, TRIGGER_WARM_SLEEP_SPECIAL_VALUE,
+    TRIGGER_WARM_SLEEP_SPECIAL_VALUE};
 
 // This packet does nothing except wake up our neighbors
 
-static byte nop_wake_packet[2] = {NOP_SPECIAL_VALUE, NOP_SPECIAL_VALUE};
+static byte nop_wake_packet[] = {NOP_SPECIAL_VALUE, NOP_SPECIAL_VALUE,
+                                 NOP_SPECIAL_VALUE, NOP_SPECIAL_VALUE,
+                                 NOP_SPECIAL_VALUE};
 
 static void __attribute__((noinline)) clear_packet_buffers() {
   FOREACH_FACE(f) {
@@ -201,7 +204,7 @@ void Enter() {
       fade_brightness += animation_fade_step;
       blinklib::led::internal::SetColorNow(dim(WHITE, fade_brightness));
 
-      blinklib::ir::internal::Send(f, nop_wake_packet, 2);
+      blinklib::ir::internal::Send(f, nop_wake_packet, sizeof(nop_wake_packet));
     }
   }
 
