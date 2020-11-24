@@ -225,10 +225,11 @@ void ReceiveFaceData() {
                     2;  // Subtract face value byte and header byte.
                 memcpy(&face_data->in_datagram, (const void *)&packetData[2],
                        face_data->in_datagram_len);
-              } else {
-                // Resend. Just ignore it and continue sending ack.
-                face_data->send_header = true;
               }
+
+              // Send header as, no matter what, we have to ack a received
+              // datagram.
+              face_data->send_header = true;
             }
 #endif
           } else {
