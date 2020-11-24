@@ -198,7 +198,7 @@ void ReceiveFaceData() {
           incoming_header.as_byte = packetData[1];
 
           if (incoming_header.non_special) {
-            // Normal datagram.
+            // If there is a datagram, its is a normal one.
 
             if (incoming_header.postpone_sleep) {
               // The blink on on the other side of this connection
@@ -215,20 +215,27 @@ void ReceiveFaceData() {
             }
 
             if (packetDataLen > 2) {
-              // We also received a datagram to process.
+              // We also received a datagram to process. If there is not already
+              // a datagram in the local buffer, we will copy it there. If there
+              // is one we will pretend we did not receive it so the other end
+              // will retry sending. This allows delayed propagation of
+              // datagrams in a cluster without losing data.
               if (incoming_header.sequence != face_data->header.ack_sequence) {
-                // Looks like a new one. Record it and start sending acks for
-                // it.
-                face_data->header.ack_sequence = incoming_header.sequence;
-                face_data->in_datagram_len =
-                    packetDataLen -
-                    2;  // Subtract face value byte and header byte.
-                memcpy(&face_data->in_datagram, (const void *)&packetData[2],
-                       face_data->in_datagram_len);
+                if (face_data->in_datagram_len == 0) {
+                  // Looks like a new one and there is no pending datagram to be
+                  // processed in this face. Record it and start sending acks
+                  // for it.
+                  face_data->header.ack_sequence = incoming_header.sequence;
+                  face_data->in_datagram_len =
+                      packetDataLen -
+                      2;  // Subtract face value byte and header byte.
+                  memcpy(&face_data->in_datagram, (const void *)&packetData[2],
+                         face_data->in_datagram_len);
+                }
               }
 
               // Send header as, no matter what, we have to ack a received
-              // datagram.
+              // datagram (or the previous one).
               face_data->send_header = true;
             }
 #endif
