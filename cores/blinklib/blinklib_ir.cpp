@@ -189,15 +189,19 @@ void ReceiveFaceData() {
         uint8_t packetDataLen = (ir_rx_state->packetBufferLen) -
                                 1;  // deduct the BlinkBIOS packet type byte.
 #endif
-        // Save face value.
-        face_data->in_value = packetData[0];
 
-        if (packetDataLen > 1) {
+        if (packetDataLen == 1) {
+          // Save face value.
+          face_data->in_value = packetData[0];
+        } else {
           // Guaranteed delivery: Parse incoming header.
           Header incoming_header;
           incoming_header.as_byte = packetData[1];
 
           if (incoming_header.non_special) {
+            // Save face value.
+            face_data->in_value = packetData[0];
+
             // If there is a datagram, its is a normal one.
 
             if (incoming_header.postpone_sleep) {
