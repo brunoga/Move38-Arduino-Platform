@@ -15,7 +15,7 @@
                       // remote button press in this long
 
 #define SLEEP_ANIMATION_DURATION_MS 300
-#define SLEEP_ANIMATION_MAX_BRIGHTNESS 30
+#define SLEEP_ANIMATION_MAX_BRIGHTNESS 200
 #define SLEEP_PACKET_REPEAT_COUNT \
   5  // How many times do we send the sleep and wake packets for redunancy?
 
@@ -72,17 +72,25 @@ void Enter() {
 
   // Figure out how much brightness to animate on each packet
 
+  const int animation_fade_step =
+      SLEEP_ANIMATION_MAX_BRIGHTNESS / (SLEEP_PACKET_REPEAT_COUNT * FACE_COUNT);
+
+  uint8_t fade_brightness;
+
   // For the sleep animation we start bright and dim to 0 by the end
 
   // This code picks a start near to SLEEP_ANIMATION_MAX_BRIGHTNESS that makes
   // sure we end up at 0
-  uint8_t fade_brightness = SLEEP_ANIMATION_MAX_BRIGHTNESS;
+  fade_brightness = SLEEP_ANIMATION_MAX_BRIGHTNESS;
 
   for (uint8_t n = 0; n < SLEEP_PACKET_REPEAT_COUNT; n++) {
     FOREACH_FACE(f) {
-      blinklib::led::internal::SetColorNow(Color{1, 0, 0, fade_brightness});
+      blinklib::led::internal::SetColorNow(dim(BLUE, fade_brightness));
 
-      fade_brightness--;
+      fade_brightness -= animation_fade_step;
+
+      // while ( blinkbios_is_rx_in_progress( f ) );     // Wait to clear to
+      // send (no guarantee, but better than just blink sending)
 
       blinklib::ir::internal::Send(f, force_sleep_packet, 2);
     }
@@ -181,14 +189,15 @@ void Enter() {
 
   // For the wake animation we start off and dim to MAX by the end
 
+  // This code picks a start near to SLEEP_ANIMATION_MAX_BRIGHTNESS that makes
+  // sure we end up at 0
   fade_brightness = 0;
 
   for (uint8_t n = 0; n < SLEEP_PACKET_REPEAT_COUNT; n++) {
     FOREACH_FACE(f) {
       // INcrement first - they are already seeing OFF when we start
-      fade_brightness--;
-      blinklib::led::internal::SetColorNow(
-          Color{1, fade_brightness, fade_brightness, fade_brightness});
+      fade_brightness += animation_fade_step;
+      blinklib::led::internal::SetColorNow(dim(WHITE, fade_brightness));
 
       blinklib::ir::internal::Send(f, nop_wake_packet, 2);
     }
