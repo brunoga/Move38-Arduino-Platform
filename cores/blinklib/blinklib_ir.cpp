@@ -147,7 +147,7 @@ bool Send(byte face, const byte *data, byte len) {
 #endif
 }
 
-void ReceiveFaceData() {
+void __attribute__((noinline)) ReceiveFaceData() {
   //  Use these pointers to step though the arrays
   FaceData *face_data = face_data_;
   volatile ir_rx_state_t *ir_rx_state = blinkbios_irdata_block.ir_rx_states;

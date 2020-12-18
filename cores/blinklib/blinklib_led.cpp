@@ -68,7 +68,7 @@ void __attribute__((noinline)) setColorOnFace(Color newColor, byte face) {
   //  newColor;       // Size = 1948 bytes
 }
 
-void __attribute__((noinline)) setColor(Color newColor) {
+void setColor(Color newColor) {
   FOREACH_FACE(f) { setColorOnFace(newColor, f); }
 }
 
@@ -88,7 +88,7 @@ Color lighten(Color color, byte brightness) {
                             MAX_BRIGHTNESS))};
 }
 
-Color __attribute__((noinline)) makeColorRGB(byte red, byte green, byte blue) {
+Color makeColorRGB(byte red, byte green, byte blue) {
   // Internal color representation is only 5 bits, so we have to divide down
   // from 8 bits
   return {0, (byte)(red >> 3), (byte)(green >> 3), (byte)(blue >> 3)};

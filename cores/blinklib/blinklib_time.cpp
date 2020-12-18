@@ -13,12 +13,12 @@ namespace internal {
 // Millis snapshot for this pass though loop
 millis_t now;
 
-void updateNow() { now = currentMillis(); }
+void __attribute__((noinline)) updateNow() { now = currentMillis(); }
 
 // Capture time snapshot
 // It is 4 bytes long so we cli() so it can not get updated in the middle of
 // us grabbing it
-millis_t __attribute__((noinline)) currentMillis() {
+millis_t currentMillis() {
   cli();
   millis_t currentNow = blinkbios_millis_block.millis;
   sei();
