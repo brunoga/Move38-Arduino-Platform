@@ -38,10 +38,14 @@ void setValueSentOnAllFaces(byte value);
 
 #ifndef BGA_CUSTOM_BLINKLIB_DISABLE_DATAGRAM
 // Must be smaller than IR_RX_PACKET_SIZE.
+#ifdef BGA_CUSTOM_BLINKLIB_IR_DATAGRAM_LEN
+#define IR_DATAGRAM_LEN BGA_CUSTOM_BLINKLIB_IR_DATAGRAM_LEN
+#else
 #define IR_DATAGRAM_LEN 16
+#endif
 
-// Returns the number of bytes waiting in the data buffer, or 0 if no datagram
-// is ready.
+// Returns the number of bytes waiting in the data buffer, or 0 if no
+// datagram is ready.
 byte getDatagramLengthOnFace(byte face);
 
 // Returns true if a datagram is available in the buffer.
