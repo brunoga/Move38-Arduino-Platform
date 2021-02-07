@@ -73,19 +73,19 @@ void setColor(Color newColor) {
 }
 
 Color dim(Color color, byte brightness) {
-  return {1, (byte)((color.r * brightness) / MAX_BRIGHTNESS),
-          (byte)((color.g * brightness) / MAX_BRIGHTNESS),
-          (byte)((color.b * brightness) / MAX_BRIGHTNESS)};
+  return {1, (byte)((color.r * (brightness + 1)) >> 8),
+          (byte)((color.g * (brightness + 1)) >> 8),
+          (byte)((color.b * (brightness + 1)) >> 8)};
 }
 
 Color lighten(Color color, byte brightness) {
   return {1,
-          (byte)(color.r + (((MAX_BRIGHTNESS_5BIT - color.r) * brightness) /
-                            MAX_BRIGHTNESS)),
-          (byte)(color.g + (((MAX_BRIGHTNESS_5BIT - color.g) * brightness) /
-                            MAX_BRIGHTNESS)),
-          (byte)(color.b + (((MAX_BRIGHTNESS_5BIT - color.b) * brightness) /
-                            MAX_BRIGHTNESS))};
+          (byte)(color.r +
+                 (((MAX_BRIGHTNESS_5BIT - color.r) * (brightness + 1)) >> 8)),
+          (byte)(color.g +
+                 (((MAX_BRIGHTNESS_5BIT - color.g) * (brightness + 1)) >> 8)),
+          (byte)(color.b +
+                 (((MAX_BRIGHTNESS_5BIT - color.b) * (brightness + 1)) >> 8))};
 }
 
 Color makeColorRGB(byte red, byte green, byte blue) {
