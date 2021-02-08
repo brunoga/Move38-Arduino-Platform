@@ -197,38 +197,39 @@ void __attribute__((noinline)) ReceiveFaceData() {
             MaybeEnableSendPostponeWarmSleep();
           }
 
+          // Always update face value even if the sequence number did not
+          // change.
+          face_data->in_value = packetData[1];
+
 #ifndef BGA_CUSTOM_BLINKLIB_DISABLE_DATAGRAM
           if (incoming_header.ack_sequence == face_data->out_header.sequence) {
             // We received an ack for the datagram we were sending. Mark it as
             // delivered.
             face_data->out_datagram_len = 0;
           }
-#endif
 
-          // Always update face value even if the sequence number did not
-          // change.
-          face_data->in_value = packetData[1];
-
-          // We also received data to process. If there is not already
-          // a datagram in the local buffer, we will copy it there. If there
-          // is one we will pretend we did not receive it so the other end
-          // will retry sending. This allows delayed propagation of
-          // datagrams in a cluster without losing data.
-          if (incoming_header.sequence != face_data->out_header.ack_sequence) {
-#ifndef BGA_CUSTOM_BLINKLIB_DISABLE_DATAGRAM
-            if (face_data->in_datagram_len == 0) {
-              // Looks like a new one and there is no pending datagram to be
-              // processed in this face. Record it and start sending acks
-              // for it.
-              face_data->out_header.ack_sequence = incoming_header.sequence;
-              face_data->in_datagram_len =
-                  packetDataLen -
-                  2;  // Subtract face value byte and header byte.
-              memcpy(&face_data->in_datagram, (const void *)&packetData[2],
-                     face_data->in_datagram_len);
+          if (packetDataLen > 2) {
+            // We also received data to process. If there is not already
+            // a datagram in the local buffer, we will copy it there. If there
+            // is one we will pretend we did not receive it so the other end
+            // will retry sending. This allows delayed propagation of
+            // datagrams in a cluster without losing data.
+            if (incoming_header.sequence !=
+                face_data->out_header.ack_sequence) {
+              if (face_data->in_datagram_len == 0) {
+                // Looks like a new one and there is no pending datagram to be
+                // processed in this face. Record it and start sending acks
+                // for it.
+                face_data->out_header.ack_sequence = incoming_header.sequence;
+                face_data->in_datagram_len =
+                    packetDataLen -
+                    2;  // Subtract face value byte and header byte.
+                memcpy(&face_data->in_datagram, (const void *)&packetData[2],
+                       face_data->in_datagram_len);
+              }
             }
-#endif
           }
+#endif
         } else {
           // Special packet.
           if (packetData[0] == TRIGGER_WARM_SLEEP_SPECIAL_VALUE &&
