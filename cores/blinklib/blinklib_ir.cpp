@@ -53,17 +53,15 @@ union Header {
 };
 
 struct FaceData {
-  BGA_CUSTOM_BLINKLIB_FACE_VALUE_TYPE
-  in_value;  // Last received value on this face, or 0 if no neighbor
-             // ever seen since startup
+  byte in_value;  // Last received value on this face, or 0 if no neighbor
+                  // ever seen since startup
 #ifndef BGA_CUSTOM_BLINKLIB_DISABLE_DATAGRAM
   byte in_datagram[IR_DATAGRAM_LEN];
   byte in_datagram_len;  // 0= No datagram waiting to be read
 #endif
 
   Header out_header;
-  BGA_CUSTOM_BLINKLIB_FACE_VALUE_TYPE
-  out_value;  // Value we send out on this face
+  byte out_value;  // Value we send out on this face
 #ifndef BGA_CUSTOM_BLINKLIB_DISABLE_DATAGRAM
   byte out_datagram[IR_DATAGRAM_LEN];
   byte out_datagram_len;  // 0= No datagram waiting to be sent
@@ -192,8 +190,7 @@ void __attribute__((noinline)) ReceiveFaceData() {
 
         if (incoming_header.non_special) {
           // Save face value.
-          face_data->in_value =
-              *((BGA_CUSTOM_BLINKLIB_FACE_VALUE_TYPE *)&packetData[1]);
+          face_data->in_value = packetData[1];
 
           // If there is a datagram, its is a normal one.
 
@@ -211,7 +208,7 @@ void __attribute__((noinline)) ReceiveFaceData() {
             face_data->out_datagram_len = 0;
           }
 
-          if (packetDataLen > 1 + sizeof(BGA_CUSTOM_BLINKLIB_FACE_VALUE_TYPE)) {
+          if (packetDataLen > 2) {
             // We also received a datagram to process. If there is not already
             // a datagram in the local buffer, we will copy it there. If there
             // is one we will pretend we did not receive it so the other end
@@ -226,15 +223,8 @@ void __attribute__((noinline)) ReceiveFaceData() {
                 face_data->out_header.ack_sequence = incoming_header.sequence;
                 face_data->in_datagram_len =
                     packetDataLen -
-                    (1 +
-                     sizeof(
-                         BGA_CUSTOM_BLINKLIB_FACE_VALUE_TYPE));  // Subtract
-                                                                 // face value
-                                                                 // byte and
-                                                                 // header byte.
-                memcpy(&face_data->in_datagram,
-                       (const void *)&packetData
-                           [1 + sizeof(BGA_CUSTOM_BLINKLIB_FACE_VALUE_TYPE)],
+                    2;  // Subtract face value byte and header byte.
+                memcpy(&face_data->in_datagram, (const void *)&packetData[2],
                        face_data->in_datagram_len);
               }
             }
@@ -282,8 +272,7 @@ void SendFaceData() {
 
       // Total length of the outgoing packet. Face value + header + datagram.
 #ifndef BGA_CUSTOM_BLINKLIB_DISABLE_DATAGRAM
-      byte outgoingPacketLen = 1 + sizeof(BGA_CUSTOM_BLINKLIB_FACE_VALUE_TYPE) +
-                               face_data->out_datagram_len;
+      byte outgoingPacketLen = 2 + face_data->out_datagram_len;
 #else
       byte outgoingPacketLen = 2;
 #endif
@@ -377,9 +366,7 @@ sendDatagramOnFace(const void *data, byte len, byte face) {
 }
 #endif
 
-BGA_CUSTOM_BLINKLIB_FACE_VALUE_TYPE getLastValueReceivedOnFace(byte face) {
-  return face_data_[face].in_value;
-}
+byte getLastValueReceivedOnFace(byte face) { return face_data_[face].in_value; }
 
 bool didValueOnFaceChange(byte face) {
   static byte prev_state[FACE_COUNT];
@@ -408,10 +395,10 @@ bool isAlone() {
   return true;
 }
 
-void setValueSentOnAllFaces(BGA_CUSTOM_BLINKLIB_FACE_VALUE_TYPE value) {
+void setValueSentOnAllFaces(byte value) {
   FOREACH_FACE(face) { face_data_[face].out_value = value; }
 }
 
-void setValueSentOnFace(BGA_CUSTOM_BLINKLIB_FACE_VALUE_TYPE value, byte face) {
+void setValueSentOnFace(byte value, byte face) {
   face_data_[face].out_value = value;
 }
