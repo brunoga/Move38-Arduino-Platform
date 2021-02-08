@@ -55,34 +55,42 @@ union Header {
 struct FaceData {
   byte in_value;  // Last received value on this face, or 0 if no neighbor
                   // ever seen since startup
+
 #ifndef BGA_CUSTOM_BLINKLIB_DISABLE_DATAGRAM
   byte in_datagram[IR_DATAGRAM_LEN];
   byte in_datagram_len;  // 0= No datagram waiting to be read
 #endif
 
-  Header out_header;
+  Timer expire_time;  // When this face will be considered to be expired (no
+                      // neighbor there)
+
   byte out_value;  // Value we send out on this face
+  Header header;
 #ifndef BGA_CUSTOM_BLINKLIB_DISABLE_DATAGRAM
   byte out_datagram[IR_DATAGRAM_LEN];
   byte out_datagram_len;  // 0= No datagram waiting to be sent
 #endif
 
-  Timer expire_time;  // When this face will be considered to be expired (no
-                      // neighbor there)
   Timer
       send_time;  // Next time we will transmit on this face (set to 0 every
                   // time we get a good message so we ping-pong across the link)
+#ifndef BGA_CUSTOM_BLINKLIB_DISABLE_DATAGRAM
+
+  bool send_header;
+#endif
 
 #ifdef BGA_CUSTOM_BLINKLIB_TRACK_FACE_CONNECTION
   bool connected;  // True if the face is currently connected.
 #endif
 };
+
 static FaceData face_data_[FACE_COUNT];
 
 static Timer send_postpone_warm_sleep_timer_;  // Set each time we send a viral
                                                // button press to avoid sending
                                                // getting into a circular loop.
 
+#ifndef BGA_CUSTOM_BLINKLIB_DISABLE_DATAGRAM
 #ifdef BGA_CUSTOM_BLINKLIB_ENABLE_CHECKSUM
 static byte __attribute__((noinline))
 compute_checksum(const byte *data, byte len) {
@@ -95,6 +103,7 @@ compute_checksum(const byte *data, byte len) {
   return checksum;
 }
 #endif
+#endif
 
 // Called anytime a the button is pressed or anytime we get a viral button press
 // form a neighbor over IR Note that we know that this can not become cyclical
@@ -103,7 +112,7 @@ void MaybeEnableSendPostponeWarmSleep() {
   if (send_postpone_warm_sleep_timer_.isExpired()) {
     send_postpone_warm_sleep_timer_.set(SEND_POSTPONE_WARM_SLEEP_LOCKOUT_MS);
 
-    FOREACH_FACE(f) { face_data_[f].out_header.postpone_sleep = true; }
+    FOREACH_FACE(f) { face_data_[f].header.postpone_sleep = true; }
 
     // Prevent warm sleep
     blinklib::warm_sleep::internal::ResetTimer();
@@ -143,7 +152,7 @@ void __attribute__((noinline)) ReceiveFaceData() {
   FaceData *face_data = face_data_;
   volatile ir_rx_state_t *ir_rx_state = blinkbios_irdata_block.ir_rx_states;
 
-  FOREACH_FACE(face) {
+  FOREACH_FACE(f) {
     // Check for anything new coming in...
 
 #ifdef BGA_CUSTOM_BLINKLIB_TRACK_FACE_CONNECTION
@@ -156,7 +165,6 @@ void __attribute__((noinline)) ReceiveFaceData() {
       if (valid_data_received(ir_rx_state)) {
         // Got something that looks valid, so we know there is someone out
         // there.
-
 #ifdef BGA_CUSTOM_BLINKLIB_TRACK_FACE_CONNECTION
         if (!was_connected) {
           face_data->connected = true;
@@ -171,69 +179,76 @@ void __attribute__((noinline)) ReceiveFaceData() {
         face_data->send_time.set(0);
 
         // packetData points just after the BlinkBIOS packet type byte.
-        volatile const byte *packetData = (&ir_rx_state->packetBuffer[1]);
+        volatile const uint8_t *packetData = (&ir_rx_state->packetBuffer[1]);
 
-#ifndef BGA_CUSTOM_BLINKLIB_DISABLE_DATAGRAM
 #ifdef BGA_CUSTOM_BLINKLIB_ENABLE_CHECKSUM
-        byte packetDataLen =
+        uint8_t packetDataLen =
             (ir_rx_state->packetBufferLen) -
             2;  // deduct the BlinkBIOS packet type byte and checksum.
 #else
-        byte packetDataLen = (ir_rx_state->packetBufferLen) -
-                             1;  // deduct the BlinkBIOS packet type byte.
+        uint8_t packetDataLen = (ir_rx_state->packetBufferLen) -
+                                1;  // deduct the BlinkBIOS packet type byte.
 #endif
-#endif
 
-        // Guaranteed delivery: Parse incoming header.
-        Header incoming_header = {.as_byte = packetData[0]};
+        if (packetDataLen == 1) {
+          // Save face value.
+          face_data->in_value = packetData[0];
+        } else {
+          // Guaranteed delivery: Parse incoming header.
+          Header incoming_header;
+          incoming_header.as_byte = packetData[1];
 
-        if (incoming_header.non_special) {
-          // Normal packet.
+          if (incoming_header.non_special) {
+            // Save face value.
+            face_data->in_value = packetData[0];
 
-          if (incoming_header.postpone_sleep) {
-            // The blink on on the other side of this connection
-            // is telling us that a button was pressed recently
-            // Send the viral message to all neighbors.
-            MaybeEnableSendPostponeWarmSleep();
-          }
+            // If there is a datagram, its is a normal one.
+
+            if (incoming_header.postpone_sleep) {
+              // The blink on on the other side of this connection
+              // is telling us that a button was pressed recently
+              // Send the viral message to all neighbors.
+              MaybeEnableSendPostponeWarmSleep();
+            }
 
 #ifndef BGA_CUSTOM_BLINKLIB_DISABLE_DATAGRAM
-          if (incoming_header.ack_sequence == face_data->out_header.sequence) {
-            // We received an ack for the datagram we were sending. Mark it as
-            // delivered.
-            face_data->out_datagram_len = 0;
-          }
-#endif
+            if (incoming_header.ack_sequence == face_data->header.sequence) {
+              // We received an ack for the datagram we were sending. Mark it as
+              // delivered.
+              face_data->out_datagram_len = 0;
+            }
 
-          // Always update face value even if the sequence number did not
-          // change.
-          face_data->in_value = packetData[1];
+            if (packetDataLen > 2) {
+              // We also received a datagram to process. If there is not already
+              // a datagram in the local buffer, we will copy it there. If there
+              // is one we will pretend we did not receive it so the other end
+              // will retry sending. This allows delayed propagation of
+              // datagrams in a cluster without losing data.
+              if (incoming_header.sequence != face_data->header.ack_sequence) {
+                if (face_data->in_datagram_len == 0) {
+                  // Looks like a new one and there is no pending datagram to be
+                  // processed in this face. Record it and start sending acks
+                  // for it.
+                  face_data->header.ack_sequence = incoming_header.sequence;
+                  face_data->in_datagram_len =
+                      packetDataLen -
+                      2;  // Subtract face value byte and header byte.
+                  memcpy(&face_data->in_datagram, (const void *)&packetData[2],
+                         face_data->in_datagram_len);
+                }
+              }
 
-          // We also received data to process. If there is not already
-          // a datagram in the local buffer, we will copy it there. If there
-          // is one we will pretend we did not receive it so the other end
-          // will retry sending. This allows delayed propagation of
-          // datagrams in a cluster without losing data.
-          if (incoming_header.sequence != face_data->out_header.ack_sequence) {
-#ifndef BGA_CUSTOM_BLINKLIB_DISABLE_DATAGRAM
-            if (face_data->in_datagram_len == 0) {
-              // Looks like a new one and there is no pending datagram to be
-              // processed in this face. Record it and start sending acks
-              // for it.
-              face_data->out_header.ack_sequence = incoming_header.sequence;
-              face_data->in_datagram_len =
-                  packetDataLen -
-                  2;  // Subtract face value byte and header byte.
-              memcpy(&face_data->in_datagram, (const void *)&packetData[2],
-                     face_data->in_datagram_len);
+              // Send header as, no matter what, we have to ack a received
+              // datagram (or the previous one).
+              face_data->send_header = true;
             }
 #endif
-          }
-        } else {
-          // Special packet.
-          if (packetData[0] == TRIGGER_WARM_SLEEP_SPECIAL_VALUE &&
-              packetData[1] == TRIGGER_WARM_SLEEP_SPECIAL_VALUE) {
-            blinklib::warm_sleep::internal::Enter();
+          } else {
+            // Special packet.
+            if (packetData[0] == TRIGGER_WARM_SLEEP_SPECIAL_VALUE &&
+                packetData[1] == TRIGGER_WARM_SLEEP_SPECIAL_VALUE) {
+              blinklib::warm_sleep::internal::Enter();
+            }
           }
         }
       }
@@ -267,27 +282,31 @@ void SendFaceData() {
       // timeout to do automatic retries to kickstart things when a new
       // neighbor shows up or when an IR message gets missed
 
-      face_data->out_header.non_special = true;
+      face_data->header.non_special = true;
 
+      // Total length of the outgoing packet. Face value + header + datagram.
 #ifndef BGA_CUSTOM_BLINKLIB_DISABLE_DATAGRAM
-      // Total length of the outgoing packet. Header + face value (if modified)
-      // + datagram.
-      byte outgoingPacketLen = 2 + face_data->out_datagram_len;
+      byte outgoingPacketLen =
+          1 +
+          (face_data->send_header || face_data->header.postpone_sleep ||
+           (face_data->out_datagram_len != 0)) +
+          face_data->out_datagram_len;
 #else
-      // Total length of the outgoing packet. Header + face value.
-      byte outgoingPacketLen = 2;
+      byte outgoingPacketLen = 1 + face_data->header.postpone_sleep;
 #endif
-
       // Ok, it is time to send something on this face.
 
       // Send packet.
-      if (Send(f, (const byte *)&face_data->out_header, outgoingPacketLen)) {
-        face_data->out_header.postpone_sleep = false;
+      if (Send(f, (const byte *)&face_data->out_value, outgoingPacketLen)) {
+#ifndef BGA_CUSTOM_BLINKLIB_DISABLE_DATAGRAM
+        face_data->send_header = false;
+#endif
+        face_data->header.postpone_sleep = false;
       }
 
-      // If the above returns 0, then we could not send because there was an
-      // RX in progress on this face. In this case we will send this packet
-      // again when the ongoing transfer finishes.
+      // If the above returns 0, then we could not send because there was an RX
+      // in progress on this face. In this case we will send this packet again
+      // when the ongoing transfer finishes.
 
       // Guaranteed delivery: If it returns non-zero, we can not be sure the
       // datagram was received at the other end so we wait for confirmation
@@ -359,7 +378,7 @@ sendDatagramOnFace(const void *data, byte len, byte face) {
   if (face_data->out_datagram_len != 0) return false;
 
   // Guaranteed delivery: Increment sequence number.
-  face_data->out_header.sequence = face_data->out_header.sequence + 1;
+  face_data->header.sequence = face_data->header.sequence + 1;
 
   face_data->out_datagram_len = len;
   memcpy(face_data->out_datagram, data, len);
