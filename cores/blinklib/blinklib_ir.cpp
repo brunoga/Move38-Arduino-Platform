@@ -396,7 +396,7 @@ bool isAlone() {
 }
 
 void setValueSentOnAllFaces(byte value) {
-  FOREACH_FACE(face) { face_data_[face].out_value = value; }
+  FOREACH_FACE(face) { setValueSentOnFace(value, face); }
 }
 
 void setValueSentOnFace(byte value, byte face) {
