@@ -206,6 +206,9 @@ void __attribute__((noinline)) ReceiveFaceData() {
             // We received an ack for the datagram we were sending. Mark it as
             // delivered.
             face_data->out_datagram_len = 0;
+
+            // Guaranteed delivery: Increment sequence number.
+            face_data->out_header.sequence = face_data->out_header.sequence + 1;
           }
 
           if (packetDataLen > 2) {
@@ -355,9 +358,6 @@ sendDatagramOnFace(const void *data, byte len, byte face) {
   FaceData *face_data = &face_data_[face];
 
   if (face_data->out_datagram_len != 0) return false;
-
-  // Guaranteed delivery: Increment sequence number.
-  face_data->out_header.sequence = face_data->out_header.sequence + 1;
 
   face_data->out_datagram_len = len;
   memcpy(face_data->out_datagram, data, len);
