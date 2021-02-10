@@ -10,14 +10,22 @@
 #include "shared/blinkbios_shared_functions.h"
 #include "shared/blinkbios_shared_irdata.h"
 
+#ifdef BGA_CUSTOM_BLINKLIB_SEND_PROBE_TIMEOUT_MS
+#define TX_PROBE_TIME_MS BGA_CUSTOM_BLINKLIB_SEND_PROBE_TIMEOUT_MS
+#else
 #define TX_PROBE_TIME_MS \
   150  // How often to do a blind send when no RX has happened recently to
        // trigger ping pong Nice to have probe time shorter than expire time so
        // you have to miss 2 messages before the face will expire
+#endif
 
+#ifdef BGA_CUSTOM_BLINKLIB_FACE_EXPIRATION_TIMEOUT_MS
+#define RX_EXPIRE_TIME_MS BGA_CUSTOM_BLINKLIB_FACE_EXPIRATION_TIMEOUT_MS
+#else
 #define RX_EXPIRE_TIME_MS \
   200  // If we do not see a message in this long, then show that face as
        // expired
+#endif
 
 #define SEND_POSTPONE_WARM_SLEEP_LOCKOUT_MS \
   2000  // Any viral button presses received from IR within this time period are
@@ -306,9 +314,7 @@ void SendFaceData() {
       // send again. So the only case when this probe timeout will happen is
       // if there is no neighbor there or if transmitting a datagram took more
       // time than the probe timeout (which will happen with big datagrams).
-      face_data->send_time.set((blinklib::time::internal::currentMillis() -
-                                blinklib::time::internal::now) +
-                               TX_PROBE_TIME_MS);
+      face_data->send_time.set(TX_PROBE_TIME_MS + f);
     }
     face_data++;
   }
