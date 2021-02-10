@@ -306,7 +306,9 @@ void SendFaceData() {
       // send again. So the only case when this probe timeout will happen is
       // if there is no neighbor there or if transmitting a datagram took more
       // time than the probe timeout (which will happen with big datagrams).
-      face_data->send_time.set(TX_PROBE_TIME_MS);
+      face_data->send_time.set((blinklib::time::internal::currentMillis() -
+                                blinklib::time::internal::now) +
+                               TX_PROBE_TIME_MS);
     }
     face_data++;
   }
