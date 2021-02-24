@@ -76,7 +76,7 @@ bool buttonSingleClicked() {
   return grabandclearbuttonflag(BUTTON_BITFLAG_SINGLECLICKED);
 }
 
-bool buttonDoubleClicked() {
+bool __attribute__((noinline)) buttonDoubleClicked() {
   return grabandclearbuttonflag(BUTTON_BITFLAG_DOUBLECLICKED);
 }
 

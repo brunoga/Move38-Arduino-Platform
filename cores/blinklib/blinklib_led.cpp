@@ -12,7 +12,7 @@ namespace led {
 
 namespace internal {
 
-pixelColor_t buffer_[PIXEL_COUNT];
+static pixelColor_t buffer_[PIXEL_COUNT];
 
 void SaveState() {
   memcpy(buffer_, blinkbios_pixel_block.pixelBuffer,
@@ -59,8 +59,7 @@ void __attribute__((noinline)) setColorOnFace(Color newColor, byte face) {
   // This at least gets the semantics right of coping a snapshot of the actual
   // value.
 
-  blinkbios_pixel_block.pixelBuffer[face].as_uint16 =
-      newColor.as_uint16;  // Size = 1940 bytes
+  blinkbios_pixel_block.pixelBuffer[face] = newColor;  // Size = 1940 bytes
 
   // This BTW compiles much worse
 
