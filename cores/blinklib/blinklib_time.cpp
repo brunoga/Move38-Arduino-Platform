@@ -13,7 +13,7 @@ namespace internal {
 // Millis snapshot for this pass though loop
 millis_t now;
 
-void __attribute__((noinline)) updateNow() { now = currentMillis(); }
+void updateNow() { now = currentMillis(); }
 
 // Capture time snapshot
 // It is 4 bytes long so we cli() so it can not get updated in the middle of

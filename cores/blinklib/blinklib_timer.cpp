@@ -22,7 +22,7 @@ void __attribute__((noinline)) Timer::set(uint32_t ms) {
   m_expireTime = millis() + ms;
 }
 
-uint32_t Timer::getRemaining() {
+uint32_t __attribute__((noinline)) Timer::getRemaining() {
   uint32_t timeRemaining;
 
   if (millis() >= m_expireTime) {

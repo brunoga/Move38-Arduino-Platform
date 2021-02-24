@@ -78,7 +78,7 @@ Color dim(Color color, byte brightness) {
           (byte)((color.b * (brightness + 1)) >> 8)};
 }
 
-Color lighten(Color color, byte brightness) {
+Color __attribute__((noinline)) lighten(Color color, byte brightness) {
   return {1,
           (byte)(color.r +
                  (((MAX_BRIGHTNESS_5BIT - color.r) * (brightness + 1)) >> 8)),
