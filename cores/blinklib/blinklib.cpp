@@ -499,7 +499,6 @@ void __attribute__((noreturn)) run(void) {
     loop();
 
     // Update the pixels to match our buffer
-
     BLINKBIOS_DISPLAY_PIXEL_BUFFER_VECTOR();
 
     // Transmit any IR packets waiting to go out
