@@ -384,9 +384,10 @@ BGA_CUSTOM_BLINKLIB_FACE_VALUE_TYPE getLastValueReceivedOnFace(byte face) {
 }
 
 bool didValueOnFaceChange(byte face) {
-  static byte prev_state[FACE_COUNT];
+  static BGA_CUSTOM_BLINKLIB_FACE_VALUE_TYPE prev_state[FACE_COUNT];
 
-  byte curr_state = getLastValueReceivedOnFace(face);
+  BGA_CUSTOM_BLINKLIB_FACE_VALUE_TYPE curr_state =
+      getLastValueReceivedOnFace(face);
 
   if (curr_state == prev_state[face]) {
     return false;
