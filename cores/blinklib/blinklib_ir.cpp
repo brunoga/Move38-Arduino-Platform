@@ -185,6 +185,7 @@ void __attribute__((noinline)) ReceiveFaceData() {
         // packetData points just after the BlinkBIOS packet type byte.
         volatile const byte *packetData = (&ir_rx_state->packetBuffer[1]);
 
+#ifndef BGA_CUSTOM_BLINKLIB_DISABLE_DATAGRAM
 #ifdef BGA_CUSTOM_BLINKLIB_ENABLE_CHECKSUM
         byte packetDataLen =
             (ir_rx_state->packetBufferLen) -
@@ -192,7 +193,8 @@ void __attribute__((noinline)) ReceiveFaceData() {
 #else
         byte packetDataLen = (ir_rx_state->packetBufferLen) -
                              1;  // deduct the BlinkBIOS packet type byte.
-#endif
+#endif  // BGA CUSTOM_BLINKLIB_ENABLE_CHECKSUM
+#endif  // BGA_CUSTOM_BLINKLIB_DISABLE_DATAGRAM
 
         // Guaranteed delivery: Parse incoming header.
         Header incoming_header;
