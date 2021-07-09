@@ -29,7 +29,7 @@
 // it all works out because the params happened to be in the same registers because of the AVR C calling convention.
 //  When compiling the BIOS with LTO, it even puts the send packet function right at the target of the vector.
 
-// We use unused inetrrupt vectors to link between the user and BIOS code since they are at a known place.
+// We use unused interrupt vectors to link between the user and BIOS code since they are at a known place.
 // The links are defined as symbols like `boot_vectorX` where X is the number of the unused vector we are taking.
 // In the BIOS project, these appear in the vector table in `startup.S`.
 // IN the user mode projects, these appear in the linkscript and are hard coded to the correct addressed (based at the bootloader vtable at 0x3800).

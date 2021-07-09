@@ -8,6 +8,10 @@ Each virgin blink needs to be programmed with...
 
 ### Fuses
 
+#### ATMEGA168
+
+The only change from factory default is the fuse that enables jumping to the bootloader on reset (BOOTRST). 
+
 BOOTSZ = 1024W_1C00
 BOOTRST = [X]
 RSTDISBL = [ ]
@@ -26,6 +30,28 @@ LOW = 0x62 (valid)
 
 Note that the `high` and `low` fuses are the same as their default values from the factory, but the `extended` fuse must be reprogrammed from the default value. 
 
+#### ATMEGA328
+
+The only change from factory default is the fuse that enables jumping to the bootloader on reset (BOOTRST). 
+
+BODLEVEL = DISABLED
+RSTDISBL = [ ]
+DWEN = [ ]
+SPIEN = [X]
+WDTON = [ ]
+EESAVE = [ ]
+BOOTSZ = 2048W_3800
+BOOTRST = [X]
+CKDIV8 = [X]
+CKOUT = [ ]
+SUT_CKSEL = INTRCOSC_8MHZ_6CK_14CK_65MS
+
+EXTENDED = 0xFF (valid)
+HIGH = 0xD8 (valid)
+LOW = 0x62 (valid)
+
+Note that the `extended` and `low` fuses are the same as their default values from the factory, but the `high` fuse must be reprogrammed from the default value. 
+
 ### Bootloader
 
 The bootloader code comes from a different repo and can be found in the [`bootloaders`](/bootloaders) directory here.
@@ -40,7 +66,7 @@ You can minimize the number of production programming steps by combining the app
 
 ### Example 
 
-Here is and example command that will program a blink using the `AVRDUDE` utility and the  `USBtiny` programmer...
+Here is and example command that will program a `atmega168pb` blink using the `AVRDUDE` utility and the  `USBtiny` programmer...
 
 ```
 avrdude -B 5 -v -patmega168pb -cusbtiny -Uflash:w:SKETCHNAME.ino.with_bootloader.standard.hex:i -Uefuse:w:0xf8:m -u 
@@ -64,7 +90,7 @@ avrdude -B 4 -D -v -patmega168pb -cusbtiny -Uflash:w:D-TimerFlashX.ino.with_boot
 ```
  
 `-D` skips erasing the flash before programming it. If you are programming virgin chips then the flash should be blank.
-`-B` lowered to 4 slightly increases the programmer clock. Some out of spec chips might fall to program at this speed. 
+`-B` lowered to 4 slightly increases the programmer clock, which reduces programming time. Note that some units might fail at this increased speed. 
 
 Note that these new options are both safe because the verify will fail if anything goes wrong. 
 

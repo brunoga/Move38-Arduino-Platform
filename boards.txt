@@ -6,44 +6,127 @@ menu.cpu=Processor
 
 blink.name=Blink (Custom Blinklib)
 
-blink.vid.0=0x2341
-blink.pid.0=0x0043
-blink.vid.1=0x2341
-blink.pid.1=0x0001
-blink.vid.2=0x2A03
-blink.pid.2=0x0043
-blink.vid.3=0x2341
-blink.pid.3=0x0243
-
 blink.upload.tool=avrdude
+
+# IMPORTANT: Do not put a protocol here. 
+# If the protocol is `null` then Arduino will fall back and use 
+# whatever programmer is selected in Tools->Programmer
+
+# This is the maximum size of a program image. It comes from 
+# Used for printing the "Sketch uses... of program storage space..." message and for moving the program image from base 0x000 "active" game area up to the "built-in" game area. 
+# Obnoxiously, the `obj-size` command seems to only be able to take decimal, so 5888=0x1700
+# Must match the `FLASH_GAME_IMAGE_SIZE` in the linker file. 
+blink.upload.maximum_size=5888
+blink.upload.maximum_data_size=1024
+blink.upload.speed=115200
+
+# The only fuse that is different from factory default is extended_fuses. 
+# BOOTRST=0 (programmed)  enables jumping to the bootloader on reset and sets the bootloader 
+# BOOTSZ1=0, BOOTSZ0=0 (both programmed) sets bootloader size to 1Kb and is the default. 
+
+blink.bootloader.tool=avrdude
+blink.bootloader.low_fuses=0x62
+blink.bootloader.high_fuses=0xDF
+blink.bootloader.extended_fuses=0xf8
+
+# Note that the folder `bootloaders` seems to be hardcoded into the Arduino IDE
+
+blink.bootloader.file=BlinkBIOS-168PB.hex
+
+blink.build.mcu=atmega168pb
+blink.build.f_cpu=8000000L
+blink.build.board=AVR_BLINK_168
+blink.build.core=blinklib
+blink.build.variant=standard
+blink.build.linkscript=avr5-atmega168pb.xn
+blink.build.builtinbase=0x1700
+
+##############################################################
+
+blink328.name=Blink328
+
+# This board lets you download code into a 328-based blink, but the code is still limited to the memory sizes
+# of a 168-base blink so any games made with this board will work when downloaded to either kind of blink
+
+blink328.upload.tool=avrdude
+
 # IMPORTANT: Do not put a protocol here. 
 # If the protocol is `null` then Arduino will fall back and use 
 # whatever programmer is selected in Tools->Programmer
 
 
 # This is the maximum size of a program image. It comes from 
-# `blinkbios.h` and is the result of `FLASH_PAGES_PER_IMAGE` * `FLASH_BYTES_PER_PAGE`
-# Used only for printing the "Sketch uses... of program stroage space..." message.
-blink.upload.maximum_size=5888
-blink.upload.maximum_data_size=1024
-blink.upload.speed=115200
+# Used for printing the "Sketch uses... of program storage space..." message and for moving the program image from base 0x000 "active" game area up to the "built-in" game area. 
+# Must match the `FLASH_GAME_IMAGE_SIZE` in the linker file. 
+# Obnoxiously, the `obj-size` command seems to only be able to take decimal
+blink328.upload.maximum_size=5888
+blink328.upload.maximum_data_size=1024
+blink328.upload.speed=115200
 
-#blink.bootloader.tool=avrdude
-#blink.bootloader.low_fuses=0xFF
-#blink.bootloader.high_fuses=0xDE
-#blink.bootloader.extended_fuses=0xFD
-#blink.bootloader.unlock_bits=0x3F
-#blink.bootloader.lock_bits=0x0F
 
-# Note that the folder `bootloaders` seems to be hardcoded into the Ardunio IDE
+# The only fuse that is different from factory default is high_fuses. 
+# BOOTRST=0 (programmed)  enables jumping to the bootloader on reset and sets the bootloader 
+# BOOTSZ1=0, BOOTSZ0=0 (both programmed) sets bootloader size to 2Kb and is the default. 
+# WARNING: The datasheet is wrong about where these fuse bit are (at least as of 5/13/21)!
 
-blink.bootloader.file=BlinkBIOS.hex
+blink328.bootloader.tool=avrdude
+blink328.bootloader.low_fuses=0x62
+blink328.bootloader.high_fuses=0xD8
+blink328.bootloader.extended_fuses=0xff
 
-blink.build.mcu=atmega168pb
-blink.build.f_cpu=8000000L
-blink.build.board=AVR_BLINK
-blink.build.core=blinklib
-blink.build.variant=standard
+# Note that the folder `bootloaders` seems to be hardcoded into the Arduino IDE
+
+blink328.bootloader.file=BlinkBIOS-328PB.hex
+
+blink328.build.mcu=atmega328pb
+blink328.build.f_cpu=8000000L
+blink328.build.board=AVR_BLINK_328
+blink328.build.core=blinklib
+blink328.build.variant=standard
+blink328.build.linkscript=avr5-atmega328.xn
+blink328.build.builtinbase=0x3900
 
 ##############################################################
 
+blink328max.name=BlinkMAX
+
+# This board lets you make bigger games that will only work on 328-based blinks.
+# Any game made with this board will not work on or transfer to a 168 blink. 
+
+blink328max.upload.tool=avrdude
+
+# IMPORTANT: Do not put a protocol here. 
+# If the protocol is `null` then Arduino will fall back and use 
+# whatever programmer is selected in Tools->Programmer
+
+
+# This is the maximum size of a program image. It comes from 
+# Used for printing the "Sketch uses... of program storage space..." message and for moving the program image from base 0x000 "active" game area up to the "built-in" game area. 
+# Must match the `FLASH_GAME_IMAGE_SIZE` in the linker file. 
+# Obnoxiously, the `obj-size` command seems to only be able to take decimal
+blink328max.upload.maximum_size=9984
+blink328max.upload.maximum_data_size=2048
+blink328max.upload.speed=115200
+
+
+# The only fuse that is different from factory default is high_fuses. 
+# BOOTRST=0 (programmed)  enables jumping to the bootloader on reset and sets the bootloader 
+# BOOTSZ1=0, BOOTSZ0=0 (both programmed) sets bootloader size to 2Kb and is the default. 
+# WARNING: The datasheet is wrong about where these fuse bit are (at least as of 5/13/21)!
+
+blink328max.bootloader.tool=avrdude
+blink328max.bootloader.low_fuses=0x62
+blink328max.bootloader.high_fuses=0xD8
+blink328max.bootloader.extended_fuses=0xff
+
+# Note that the folder `bootloaders` seems to be hardcoded into the Arduino IDE
+
+blink328max.bootloader.file=BlinkBIOS-328PB-MAX.hex
+
+blink328max.build.mcu=atmega328pb
+blink328max.build.f_cpu=8000000L
+blink328max.build.board=AVR_BLINK_328
+blink328max.build.core=blinklib
+blink328max.build.variant=standard
+blink328max.build.linkscript=avr5-atmega328.xn
+blink328max.build.builtinbase=0x3900
